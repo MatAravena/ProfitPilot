@@ -3,9 +3,11 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "fastapi-dev": "pip3 install -r requirements.txt && python3 -m uvicorn api.index:app --reload",
+    "fastapi-req": "pip install -r ./api/requirements.txt",
+    "fastapi-dev": "python -m uvicorn api.index:app --reload",
+    "be": "npm run fastapi-req && npm run fastapi-dev",
     "next-dev": "next dev",
-    "dev": "concurrently \"npm run next-dev\" \"npm run fastapi-dev\"",
+    "dev": "concurrently \"npm run next-dev\" \"npm run be\"",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"
@@ -14,6 +16,7 @@
     "@types/react": "18.3.8",
     "@types/react-dom": "18.3.0",
     "autoprefixer": "10.4.20",
+    "axios": "^1.7.9",
     "concurrently": "^9.0.1",
     "eslint": "8.41.0",
     "eslint-config-next": "13.4.4",
@@ -25,13 +28,13 @@
     "typescript": "5.6.2"
   },
   "devDependencies": {
-    "typescript": "^5",
     "@types/node": "^22.9.0",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "eslint": "^8",
+    "eslint-config-next": "15.0.3",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
-    "eslint": "^8",
-    "eslint-config-next": "15.0.3"
+    "typescript": "^5"
   }
 }
