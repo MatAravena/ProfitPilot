@@ -1,0 +1,18 @@
+Use FastAPI for:
+    Complex AI and trading logic.
+    Data fetching and aggregation from financial APIs.
+    User authentication (JWT, OAuth).
+Use Next.js API routes for:
+    Proxying requests to FastAPI to avoid direct exposure of backend URLs.
+    Handling SSR/SSG needs that require backend data.
+
+
+Recommended Approach for Your Use Case
+
+Since your project involves:
+    AI and momentum trading strategies: This logic is better suited for FastAPI, leveraging Python libraries.
+    A dashboard with dynamic charts and performance metrics: Use Next.js for SSR and client-side rendering.
+
+You can likely stick with FastAPI as the sole backend unless you need:
+    A proxy for routing or simplifying API calls.
+    Lightweight backend logic that complements your frontend.
