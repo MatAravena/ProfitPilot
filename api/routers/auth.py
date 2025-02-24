@@ -54,14 +54,13 @@ async def create_user(db: db_dependency, user_request:UseCreateRequest):
         db.commit()
     except sqlalchemy.exc.IntegrityError as duplicate:
         print("User is already register, pls try with another username")
-        return { 
+        return {
             'value': False, 
             'status': status.HTTP_409_CONFLICT, 
             'message':"User is already register, pls try with another username"
             }
     except Exception as err:
         print("Something else went wrong: ", err.__cause__)
-
 
 @auth_router.post('/token', response_model=Token)
 async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm, Depends()],

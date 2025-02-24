@@ -15,10 +15,18 @@ import uvicorn
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
 
 # Create FastAPI instance with custom docs and openapi url
-app = FastAPI( docs_url="/api/docs", openapi_url="/api/openapi.json")
+app = FastAPI(docs_url="/api/docs", 
+              openapi_url="/api/openapi.json",
+            )
 
 # Configurating the middleware
-origins = [ "http://localhost:3000" ]
+origins = [ 
+        "http://localhost:3000", 
+        "http://localhost:3001", 
+        "http://localhost:3002", 
+        "http://localhost:3003", 
+        "http://localhost:3004", 
+    ]
 
 app.add_middleware(
     CORSMiddleware,

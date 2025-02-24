@@ -28,14 +28,10 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+.pnpm-debug.log*
 
 # env files (can opt-in for committing if needed)
 .env*
-/api/env
-
-# python files
-.__pycache__*
-__pycache__/
 
 # vercel
 .vercel
@@ -44,6 +40,5 @@ __pycache__/
 *.tsbuildinfo
 next-env.d.ts
 
-
-# personal comments
-*.txt
+# clerk configuration (can include secrets)
+/.clerk/
