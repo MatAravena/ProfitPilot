@@ -1,39 +1,46 @@
 "use client";
 
-import { useContext, useState } from "react";
+import { FormEvent, useContext, useState } from "react";
 import AuthContext from "../context/authContext";
 import axios from "axios";
 
 const Login = () => {
+
     const login = useContext(AuthContext)?.login;
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [registerUsername, setRegisterUsername] = useState('');
     const [registerPassword, setRegisterPassword] = useState('');
 
-    // const handleSubmit = (e:FormEventHandler<HTMLFormElement>) => {
-    //     e.preventDefault();
-    const handleSubmit = async () => {
-        if (login)
-            await login(username, password)
+    const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+        try {
+            event.preventDefault()
+            if (login)
+                await login(username, password)
+ 
+        } catch(error) {
+            console.error('Failed to login user:', error);
+        }
     };
 
-    // const handleRegister = async (e:FormEventHandler<HTMLFormElement>) => {
-    //     e.preventDefault();
-    const handleRegister = async () => {
-      try {
-         await axios.post('http://localhost:8000/auth', {
-          username: registerUsername,
-          password: registerPassword,
-        });
+    const handleRegister = async (event: FormEvent<HTMLFormElement>) => {
+        try {
+            event.preventDefault()
+            await axios.post('http://localhost:8000/auth', {
+                username: registerUsername,
+                password: registerPassword,
+            });
 
-        if (login)
-            await login(registerUsername, registerPassword);
-
-      } catch(error) {
-        console.error('Failed to register user:', error);
+            if (login)
+            {
+                console.log('Entra login')
+                await login(registerUsername, registerPassword);
+                console.log('login funciona')
+            }
+        } catch(error) {
+            console.error('Failed to register user:', error);
+        }
     }
-  }
 
     return (
         <div className="container">

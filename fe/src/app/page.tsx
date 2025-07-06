@@ -1,12 +1,15 @@
+"use client"
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import Image from "next/image";
 import { FormEventHandler, useContext, useEffect, useState } from "react";
 import AuthContext from "./context/authContext";
-import axios from "axios";
+import axios from 'axios';
 
 export default function Home() {
-  const { user, login, logout } = useContext(AuthContext);
-  console.log(user, login, logout)
+  
+  // const { user, login, logout } = useContext(AuthContext);
+
+  // console.log(user, login, logout)
   const [workouts, setWorkouts] = useState([]);
   const [routines, setRoutines] = useState([]);
   const [workoutName, setWorkoutName] = useState('');

@@ -6,35 +6,12 @@
     "fastapi-req": "pip install -r ./api/requirements.txt",
     "fastapi-dev": "python -m uvicorn api.index:app --reload",
     "be": "npm run fastapi-req && npm run fastapi-dev",
-    "next-dev": "next dev",
+
+    "fe":"cd app && npm run dev",
+
     "dev": "concurrently \"npm run next-dev\" \"npm run be\"",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"
-  },
-  "dependencies": {
-    "@types/react": "18.3.8",
-    "@types/react-dom": "18.3.0",
-    "autoprefixer": "10.4.20",
-    "axios": "^1.7.9",
-    "concurrently": "^9.0.1",
-    "eslint": "8.41.0",
-    "eslint-config-next": "13.4.4",
-    "next": "15.0.3",
-    "postcss": "^8.4.47",
-    "react": "19.0.0-rc-66855b96-20241106",
-    "react-dom": "19.0.0-rc-66855b96-20241106",
-    "tailwindcss": "3.4.12",
-    "typescript": "5.6.2"
-  },
-  "devDependencies": {
-    "@types/node": "^22.9.0",
-    "@types/react": "^18",
-    "@types/react-dom": "^18",
-    "eslint": "^8",
-    "eslint-config-next": "15.0.3",
-    "postcss": "^8",
-    "tailwindcss": "^3.4.1",
-    "typescript": "^5"
   }
 }

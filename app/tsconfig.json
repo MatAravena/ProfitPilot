@@ -1,0 +1,45 @@
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": false,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "allowUnreachableCode": false,
+    "allowUnusedLabels": true,
+    "noUnusedLocals": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      // "@/*": ["./src/*"],
+      "@images/*": ["./public/*"],
+      "@app/*": ["./src/app*"],
+      "@styles/*": ["./src/styles/*"],
+
+      "@components/*": ["./src/app/components/*"],
+
+      "@hooks/*": ["./src/app/hooks/*"],
+      "@types/*": ["./src/app/types/*"],
+      
+      "@core/*": ["./src/app/core/*"],
+      "@store/*": ["./src/app/core/store/*"],
+      "@selectors/*": ["./src/app/core/store/selectors*"],
+
+      "@ui-library/*": ["./src/app/ui-library/*"],
+      "@lib/*": ["./src/app/lib/*"]
+    }
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "tailwind.config.js", "next.config.js", "src/app/components/data.tsx"],
+  "exclude": ["node_modules"]
+}

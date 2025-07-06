@@ -23,7 +23,11 @@ interface AuthProviderProps {
     children: ReactNode;
 }
 
-const AuthContext = createContext<AuthContextType| null>(null);
+const AuthContext = createContext<AuthContextType>({ 
+    user: undefined,
+    login: async () => {},
+    logout: () => {},
+});
 
 export const AuthProvider = ({ children }: AuthProviderProps) =>{
     const [user, setUser] = useState()
@@ -33,8 +37,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) =>{
         try {
             const formData = new FormData();
             formData.append('username',username)
-            formData.append('pass',pass)
-
+            formData.append('password',pass)
             const response = await axios.post('http://localhost:8000/auth/token', formData, {
                 headers: {'Content-Type': 'application/x-www-form-urlencoded'},
             });
@@ -43,6 +46,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) =>{
             localStorage.setItem('token', response.data.access_token)
             setUser(response.data);
             router.push('/')
+
         } catch (error) {
             console.log('Login Failed: ', error)
         }

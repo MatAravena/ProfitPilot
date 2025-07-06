@@ -40,10 +40,14 @@ __pycache__/
 # vercel
 .vercel
 
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
 
-
 # personal comments
 *.txt
+./*.txt
+/app-dashboard
+/fe
+
