@@ -2,10 +2,6 @@ Use FastAPI for:
     Complex AI and trading logic.
     Data fetching and aggregation from financial APIs.
     User authentication (JWT, OAuth).
-Use Next.js API routes for:
-    Proxying requests to FastAPI to avoid direct exposure of backend URLs.
-    Handling SSR/SSG needs that require backend data.
-
 
 Recommended Approach for Your Use Case
 

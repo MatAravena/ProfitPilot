@@ -12,7 +12,6 @@
       "args": ["api.index:app", "--reload"],
       "jinja": true
     },
-
     {
       "name": "Python Debugger: Current File",
       "type": "debugpy",

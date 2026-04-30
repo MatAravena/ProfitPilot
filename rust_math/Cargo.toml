@@ -1,0 +1,20 @@
+[package]
+name = "profitpilot_math"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "profitpilot_math"
+crate-type = ["cdylib"]   # required for PyO3 Python bindings
+
+[dependencies]
+pyo3 = { version = "0.22", features = ["extension-module"] }
+ndarray = "0.16"
+statrs = "0.17"
+rayon = "1.10"     # parallel computation
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[profile.release]
+opt-level = 3
+lto = true

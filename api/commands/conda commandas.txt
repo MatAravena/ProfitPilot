@@ -1,2 +1,0 @@
--create pip requirements from conda
-pip list --format=freeze > requirements.txt
