@@ -15,7 +15,14 @@ class Settings(BaseSettings):
 
     # API
     API_V1_PREFIX: str = "/api/v1"
-    ALLOWED_ORIGINS: List[str] = ["http://localhost:5173"]
+    # Allow all localhost ports in dev; set explicit origins in production
+    ALLOWED_ORIGINS: List[str] = [
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://localhost:5175",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:5174",
+    ]
 
     # Database
     DATABASE_URL: str = Field(..., description="Async PostgreSQL DSN e.g. postgresql+asyncpg://...")
@@ -28,19 +35,6 @@ class Settings(BaseSettings):
     # Celery
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/2"
-
-    # Broker API keys (per environment — subscribers have their own stored encrypted in DB)
-    ALPACA_API_KEY: str = ""
-    ALPACA_SECRET_KEY: str = ""
-    ALPACA_PAPER: bool = True
-
-    BYBIT_API_KEY: str = ""
-    BYBIT_SECRET_KEY: str = ""
-    BYBIT_TESTNET: bool = True
-
-    BINANCE_API_KEY: str = ""
-    BINANCE_SECRET_KEY: str = ""
-    BINANCE_TESTNET: bool = True
 
     # LLM Enrichment (optional layer — all empty by default)
     ANTHROPIC_API_KEY: str = ""

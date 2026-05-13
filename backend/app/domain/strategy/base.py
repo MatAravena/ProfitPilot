@@ -1,6 +1,6 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Type
 from uuid import UUID
 
@@ -61,7 +61,7 @@ class StrategyBase(ABC):
         self.llm_enrichment = llm_enrichment    # always Optional
 
         self.status: StrategyStatus = StrategyStatus.DRAFT
-        self.created_at: datetime = datetime.utcnow()
+        self.created_at: datetime = datetime.now(timezone.utc)
         self.last_signal_at: Optional[datetime] = None
         self.error_count: int = 0
 

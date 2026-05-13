@@ -1,0 +1,183 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "portfolio": "Portfolio",
+    "backtest": "Backtest",
+    "strategies": "Strategies",
+    "builder": "Builder",
+    "settings": "Settings"
+  },
+  "landing": {
+    "signIn": "Sign in",
+    "badge": "Live trading platform",
+    "headline": "Algorithmic trading",
+    "headlineSub": "powered by ML",
+    "subtext": "Deploy strategies across Alpaca, Bybit, and Binance. ML forecasting with PyTorch and XGBoost. Risk management built in.",
+    "getStarted": "Get started",
+    "viewDocs": "View docs",
+    "preview": {
+      "title": "Portfolio · Live",
+      "connected": "Connected",
+      "today": "+$2,341.18 (1.91%) today"
+    },
+    "kpis": { "drawdown": "Drawdown", "winRate": "Win Rate", "strategies": "Strategies" },
+    "features": {
+      "mlTitle": "ML Forecasting",
+      "mlBody": "PyTorch, XGBoost, and LightGBM signals feeding directly into strategy execution.",
+      "riskTitle": "Risk Management",
+      "riskBody": "Hard veto on every order. Max drawdown, position sizing, and stop-loss enforced automatically.",
+      "brokerTitle": "Multi-Broker",
+      "brokerBody": "Trade across Alpaca, Bybit, and Binance from a single interface. Paper mode built in."
+    }
+  },
+  "dashboard": {
+    "liveSignals": "Live Signals",
+    "noSignals": "No signals yet.",
+    "noSignalsHint": "Start a strategy in Paper or Live mode.",
+    "openPositions": "Open Positions",
+    "noPositions": "No open positions",
+    "customPlaceholder": "Custom…",
+    "conf": "{{pct}}% conf",
+    "kpis": {
+      "equity": "Portfolio Equity",
+      "unrealizedPnl": "Unrealized P&L",
+      "cash": "Cash Balance",
+      "accounts": "Accounts",
+      "positions": "Open Positions"
+    },
+    "table": {
+      "symbol": "Symbol", "broker": "Broker", "size": "Size",
+      "entry": "Entry", "current": "Current", "unrealizedPnl": "Unr. P&L"
+    },
+    "subs": {
+      "openPositions": "open positions",
+      "available": "available",
+      "connectedBrokers": "connected brokers",
+      "active": "active"
+    }
+  },
+  "backtests": {
+    "title": "Backtesting",
+    "strategy": "Strategy",
+    "symbol": "Symbol",
+    "timeframe": "Timeframe",
+    "initialCapital": "Initial Capital ($)",
+    "commission": "Commission",
+    "commissionSub": "(% per side)",
+    "commissionHint": "0.1 = 0.1% · 0.2 = 0.2% · no limit",
+    "parameters": "Parameters",
+    "dateRange": "Date Range",
+    "startDate": "Start",
+    "endDate": "End",
+    "optional": "(optional — defaults to last 1000 bars)",
+    "runBacktest": "Run Backtest",
+    "running": "Running…",
+    "emptyState": "Configure and run a backtest to see results",
+    "loadingState": "Fetching data and running simulation…",
+    "metrics": {
+      "totalReturn": "Total Return", "sharpe": "Sharpe Ratio", "maxDrawdown": "Max Drawdown",
+      "winRate": "Win Rate", "totalTrades": "Total Trades", "profitFactor": "Profit Factor",
+      "avgWin": "Avg Win", "avgLoss": "Avg Loss"
+    },
+    "equityCurve": "Equity Curve",
+    "tradeHistory": "Trade History ({{count}})",
+    "table": {
+      "side": "Side", "entry": "Entry", "exit": "Exit",
+      "size": "Size", "pnl": "P&L", "pnlPct": "P&L %"
+    }
+  },
+  "portfolio": {
+    "kpis": { "equity": "Total Equity", "cash": "Cash Balance", "pnl": "Total P&L" },
+    "equityOver": "Equity Over Time",
+    "snapshots": "{{count}} snapshots",
+    "noHistory": "No equity history yet.",
+    "noHistoryHint": "Connect a broker — snapshots are recorded every minute.",
+    "openPositions": "Open Positions",
+    "activePositions": "{{count}} active",
+    "noPositions": "No open positions",
+    "table": {
+      "symbol": "Symbol", "broker": "Broker", "qty": "Qty", "entry": "Entry",
+      "current": "Current", "unrealizedPnl": "Unr. P&L", "pct": "%"
+    },
+    "placeOrder": {
+      "title": "Place Order",
+      "noBroker": "Connect a broker first to place orders.",
+      "broker": "Broker", "symbol": "Symbol", "quantity": "Quantity", "limitPrice": "Limit Price",
+      "buy": "Buy", "sell": "Sell", "market": "market", "limit": "limit", "placing": "Placing…"
+    }
+  },
+  "strategies": {
+    "title": "Strategies",
+    "subtitle": "Configure and monitor your trading strategies",
+    "newStrategy": "New Strategy",
+    "loading": "Loading…",
+    "running": "Running ({{count}})",
+    "inactive": "Inactive ({{count}})",
+    "empty": "No strategies yet",
+    "emptyHint": "Create a strategy, attach a broker connection, and start paper trading.",
+    "card": {
+      "deleteConfirm": "Delete?", "yes": "Yes", "no": "No",
+      "noBroker": "No broker connected",
+      "errors_one": "{{count}} error", "errors_other": "{{count}} errors",
+      "startPaper": "Start Paper", "goLive": "Go Live", "pause": "Pause"
+    },
+    "dialog": {
+      "title": "New Strategy", "strategy": "Strategy",
+      "label": "Label", "labelOptional": "(optional)",
+      "symbol": "Symbol", "timeframe": "Timeframe",
+      "brokerConnection": "Broker Connection", "parameters": "Parameters",
+      "noConnection": "None (paper simulation)",
+      "cancel": "Cancel", "creating": "Creating…", "create": "Create Strategy"
+    }
+  },
+  "builder": {
+    "title": "Strategy Builder",
+    "badge": "Sandbox — no broker required",
+    "ai": {
+      "title": "Generate with AI",
+      "placeholder": "e.g. \"RSI oversold bounce with volume confirmation\"",
+      "generate": "Generate", "generating": "Generating…"
+    },
+    "editor": {
+      "available": "# Available: StrategyBase, signal(), LONG, SHORT, CLOSE, NEUTRAL, math, statistics",
+      "copy": "Copy", "copied": "Copied"
+    },
+    "config": {
+      "title": "Backtest Config", "symbol": "Symbol",
+      "timeframe": "Timeframe", "capital": "Capital ($)", "commission": "Commission (%)"
+    },
+    "run": "Run Backtest", "running": "Running…",
+    "metrics": {
+      "totalReturn": "Total Return", "sharpe": "Sharpe", "maxDd": "Max DD",
+      "winRate": "Win Rate", "trades": "Trades", "profitFactor": "Profit Factor"
+    },
+    "equityCurve": "Equity Curve",
+    "tradeHistory": "Trade History ({{count}})",
+    "table": {
+      "side": "Side", "entry": "Entry", "exit": "Exit",
+      "size": "Size", "pnl": "P&L", "pnlPct": "P&L %"
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "connectedBrokers": "Connected Brokers",
+    "addBroker": "Add broker",
+    "loading": "Loading…",
+    "noBrokers": "No brokers connected. Add one to start trading.",
+    "active": "Active",
+    "form": {
+      "title": "Add Broker", "broker": "Broker", "portfolioType": "Portfolio Type",
+      "paper": "Paper / Test",
+      "paperDesc": "Simulate trades with fake money. Safe for testing strategies.",
+      "live": "Real / Live",
+      "liveDesc": "Executes real orders with real money. Cannot be undone.",
+      "liveWarning": "Live mode executes real orders with real money. Make sure your strategy is thoroughly tested in Paper mode first.",
+      "apiKey": "API Key", "apiKeyPlaceholder": "Paste your API key…",
+      "secretKey": "Secret Key", "secretKeyPlaceholder": "Paste your secret key…",
+      "secretKeyHint": "Keys are encrypted before storage. Never shared.",
+      "label": "Label (optional)", "labelPlaceholder": "e.g. My Bybit Paper Account",
+      "connecting": "Connecting…", "connect": "Connect", "cancel": "Cancel"
+    },
+    "badge": { "paper": "Paper", "live": "Live" }
+  }
+}

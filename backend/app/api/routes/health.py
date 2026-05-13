@@ -1,4 +1,10 @@
+from __future__ import annotations
+
 from fastapi import APIRouter
+
 router = APIRouter()
 
-# TODO: implement health routes
+
+@router.get("/health", tags=["health"])
+async def health_check():
+    return {"status": "ok"}
