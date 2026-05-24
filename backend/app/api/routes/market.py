@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query, status
 
 from app.core.enums import Timeframe
-from app.domain.backtest.data_provider import _fetch_bybit, fetch_ohlcv
+from app.domain.backtest.data_provider import _fetch_bybit_page, fetch_ohlcv
 from app.domain.market_data.yfinance_provider import fetch_ohlcv as fetch_yfinance
 
 router = APIRouter(prefix="/market", tags=["market"])
@@ -37,7 +37,7 @@ async def get_ohlcv(
         )
     try:
         if source == "bybit":
-            bars = await _fetch_bybit(symbol=symbol, timeframe=tf, limit=limit)
+            bars = await _fetch_bybit_page(symbol=symbol, timeframe=tf, limit=limit)
         elif source == "yfinance":
             bars = await fetch_yfinance(symbol=symbol, timeframe=tf, limit=limit)
         else:

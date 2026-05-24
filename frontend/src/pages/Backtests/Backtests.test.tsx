@@ -62,7 +62,6 @@ describe('Backtests page', () => {
     const user = userEvent.setup()
     renderBacktests()
 
-    // Wait for strategies to load, then find the strategy select by its label
     await waitFor(() => screen.getByRole('option', { name: 'RSI Mean Reversion' }))
 
     const strategyLabel = screen.getByText('Strategy')
@@ -77,7 +76,6 @@ describe('Backtests page', () => {
   it('Run Backtest button is disabled when no strategy loaded yet', () => {
     renderBacktests()
     const btn = screen.getByRole('button', { name: /Run Backtest/i })
-    // Button is disabled until a strategy name is set (initially empty string)
     expect(btn).toBeDisabled()
   })
 })

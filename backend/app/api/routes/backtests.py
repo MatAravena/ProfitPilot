@@ -9,6 +9,7 @@ from app.models.schemas.backtest_schemas import (
     BacktestRequest,
     BacktestResponse,
     EquityPointResponse,
+    PricePointResponse,
     TradeRecordResponse,
 )
 from app.services.backtest_service import BacktestService
@@ -59,4 +60,5 @@ async def run_backtest(req: BacktestRequest):
         metrics=BacktestMetricsResponse(**result.metrics._asdict()),
         equity_curve=[EquityPointResponse(timestamp=p.timestamp, value=p.value) for p in result.equity_curve],
         trades=[TradeRecordResponse(**t._asdict()) for t in result.trades],
+        prices=[PricePointResponse(timestamp=p.timestamp, close=p.close) for p in result.prices],
     )

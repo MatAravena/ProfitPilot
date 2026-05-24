@@ -4,8 +4,12 @@ import { useTranslation } from 'react-i18next'
 import { Play, TrendingUp, TrendingDown, Activity, BarChart2, Award, AlertTriangle } from 'lucide-react'
 import { api } from '@/lib/api'
 import type { BacktestRequest, BacktestResponse, BacktestMetrics, StrategyMeta } from '@/types/backtest'
-import { cn, formatCurrency, formatPercent } from '@/lib/utils'
+import type { StrategyInstance } from '@/types'
+import { formatCurrency, formatPercent } from '@/lib/utils'
 import { EquityChart } from '@/components/charts/EquityChart'
+import { MetricCard } from '@/components/backtest/MetricCard'
+import { TradeTable } from '@/components/backtest/TradeTable'
+import { TradeChart } from '@/components/backtest/TradeChart'
 
 const TIMEFRAMES = ['1m', '5m', '15m', '1h', '4h', '1d'] as const
 const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT']
@@ -25,14 +29,20 @@ export function Backtests() {
     commission_pct: 0.001,
     parameters: {},
   })
+  const [selectValue, setSelectValue] = useState('')
   const [startDate, setStartDate] = useState('')
-  const [endDate, setEndDate] = useState('')
+  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0])
   const [result, setResult] = useState<BacktestResponse | null>(null)
 
   const { data: available } = useQuery({
     queryKey: ['backtests', 'strategies'],
     queryFn: api.backtests.strategies,
     staleTime: Infinity,
+  })
+
+  const { data: instances = [] } = useQuery<StrategyInstance[]>({
+    queryKey: ['strategies'],
+    queryFn: api.strategies.list,
   })
 
   const run = useMutation({
@@ -43,13 +53,29 @@ export function Backtests() {
   useEffect(() => {
     if (available?.strategies.length && !form.strategy_name) {
       const first = available.strategies[0]
+      setSelectValue(first.class_name)
       setForm((f) => ({ ...f, strategy_name: first.class_name, parameters: defaultParams(first) }))
     }
   }, [available])
 
-  function handleStrategyChange(name: string) {
-    const meta = available?.strategies.find((s) => s.class_name === name)
-    setForm((f) => ({ ...f, strategy_name: name, parameters: defaultParams(meta) }))
+  function handleStrategyChange(value: string) {
+    setSelectValue(value)
+    if (value.startsWith('instance:')) {
+      const id = value.slice('instance:'.length)
+      const inst = instances.find((i) => i.id === id)
+      if (!inst) return
+      const meta = available?.strategies.find((s) => s.class_name === inst.class_name)
+      setForm((f) => ({
+        ...f,
+        strategy_name: inst.class_name,
+        symbol: inst.symbol,
+        timeframe: inst.timeframe,
+        parameters: Object.keys(inst.parameters).length ? inst.parameters as Record<string, number> : defaultParams(meta),
+      }))
+    } else {
+      const meta = available?.strategies.find((s) => s.class_name === value)
+      setForm((f) => ({ ...f, strategy_name: value, parameters: defaultParams(meta) }))
+    }
   }
 
   function handleParamChange(key: string, raw: string) {
@@ -70,7 +96,8 @@ export function Backtests() {
   const activeMeta = available?.strategies.find((s) => s.class_name === form.strategy_name)
   const params = activeMeta?.parameters ?? []
   const m: BacktestMetrics | null = result?.metrics ?? null
-  const equityData = result?.equity_curve.map((p) => ({ time: p.timestamp, value: p.value })) ?? []
+  // equity_curve timestamps are Unix ms — convert to seconds for EquityChart
+  const equityData = result?.equity_curve.map((p) => ({ time: Math.floor(p.timestamp / 1000), value: p.value })) ?? []
 
   return (
     <div className="p-6 flex flex-col gap-6 animate-fade-in">
@@ -82,13 +109,24 @@ export function Backtests() {
           <div className="flex flex-col gap-1.5">
             <label className="text-xs text-text-muted font-medium">{t('backtests.strategy')}</label>
             <select
-              value={form.strategy_name}
+              value={selectValue}
               onChange={(e) => handleStrategyChange(e.target.value)}
               className="bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
             >
-              {(available?.strategies ?? []).map((s, i) => (
-                <option key={s.class_name ?? `strategy-${i}`} value={s.class_name}>{s.display_name}</option>
-              ))}
+              {instances.length > 0 && (
+                <optgroup label="My Strategies">
+                  {instances.map((inst) => (
+                    <option key={inst.id} value={`instance:${inst.id}`}>
+                      {inst.label || inst.class_name} — {inst.symbol} {inst.timeframe}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              <optgroup label="Built-in">
+                {(available?.strategies ?? []).map((s, i) => (
+                  <option key={s.class_name ?? `strategy-${i}`} value={s.class_name}>{s.display_name}</option>
+                ))}
+              </optgroup>
             </select>
             {activeMeta?.description && (
               <p className="text-[11px] text-text-muted leading-relaxed">{activeMeta.description}</p>
@@ -229,11 +267,31 @@ export function Backtests() {
               </div>
 
               <div className="grid grid-cols-4 gap-3">
-                <MetricCard label={t('backtests.metrics.totalTrades')} value={String(m.total_trades)} positive={true} icon={BarChart2} />
-                <MetricCard label={t('backtests.metrics.profitFactor')} value={m.profit_factor === Infinity ? '∞' : m.profit_factor.toFixed(2)} positive={m.profit_factor >= 1} icon={TrendingUp} />
+                <MetricCard label={t('backtests.metrics.totalTrades')} 
+                  value={String(m.total_trades)} positive={true} icon={BarChart2} />
+                <MetricCard label={t('backtests.metrics.profitFactor')} 
+                  value={m.profit_factor === Infinity ? '∞' : (m.profit_factor.toFixed(2) ?? null) }
+                  positive={m.profit_factor >= 1} icon={TrendingUp} />
                 <MetricCard label={t('backtests.metrics.avgWin')} value={formatCurrency(m.avg_win)} positive={true} icon={TrendingUp} />
                 <MetricCard label={t('backtests.metrics.avgLoss')} value={formatCurrency(m.avg_loss)} positive={false} icon={TrendingDown} />
               </div>
+
+              {result.prices.length > 0 && (
+                <div className="bg-surface border border-border rounded-xl overflow-hidden">
+                  <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+                    <span className="text-sm font-medium">Price · Trade Entries &amp; Exits</span>
+                    <span className="text-xs text-text-muted">
+                      ▲ buy &nbsp; ▼ sell
+                    </span>
+                  </div>
+                  <TradeChart
+                    prices={result.prices}
+                    trades={result.trades}
+                    timeframe={result.timeframe}
+                    height={280}
+                  />
+                </div>
+              )}
 
               <div className="bg-surface border border-border rounded-xl overflow-hidden">
                 <div className="px-4 py-3 border-b border-border flex items-center justify-between">
@@ -245,54 +303,11 @@ export function Backtests() {
                 <EquityChart data={equityData} height={260} />
               </div>
 
-              {result.trades.length > 0 && (
-                <div className="bg-surface border border-border rounded-xl overflow-hidden">
-                  <div className="px-4 py-3 border-b border-border">
-                    <span className="text-sm font-medium">{t('backtests.tradeHistory', { count: result.trades.length })}</span>
-                  </div>
-                  <div className="overflow-x-auto max-h-72 overflow-y-auto">
-                    <table className="w-full text-xs">
-                      <thead className="sticky top-0 bg-surface">
-                        <tr className="border-b border-border">
-                          {(['side','entry','exit','size','pnl','pnlPct'] as const).map((k) => (
-                            <th key={k} className="px-3 py-2 text-left text-text-muted font-medium">{t(`backtests.table.${k}`)}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {result.trades.map((tr, i) => (
-                          <tr key={`${tr.entry_time}-${tr.exit_time}-${i}`} className="border-b border-border/40 hover:bg-surface-2 transition-colors">
-                            <td className={cn('px-3 py-2 font-medium uppercase', tr.side === 'long' ? 'text-success' : 'text-danger')}>{tr.side}</td>
-                            <td className="px-3 py-2">{formatCurrency(tr.entry_price)}</td>
-                            <td className="px-3 py-2">{formatCurrency(tr.exit_price)}</td>
-                            <td className="px-3 py-2">{tr.size.toFixed(6)}</td>
-                            <td className={cn('px-3 py-2 font-medium', tr.pnl >= 0 ? 'text-success' : 'text-danger')}>{formatCurrency(tr.pnl)}</td>
-                            <td className={cn('px-3 py-2', tr.pnl_pct >= 0 ? 'text-success' : 'text-danger')}>{formatPercent(tr.pnl_pct)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
+              <TradeTable trades={result.trades} />
             </>
           )}
         </div>
       </div>
-    </div>
-  )
-}
-
-function MetricCard({ label, value, positive, icon: Icon }: {
-  label: string; value: string; positive: boolean; icon: React.ElementType
-}) {
-  return (
-    <div className="bg-surface border border-border rounded-xl p-3">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-[11px] text-text-muted font-medium">{label}</span>
-        <Icon size={12} className="text-text-muted" strokeWidth={1.5} />
-      </div>
-      <p className={cn('text-base font-bold', positive ? 'text-success' : 'text-danger')}>{value}</p>
     </div>
   )
 }

@@ -7,7 +7,7 @@ import structlog
 from app.core.enums import Direction, Timeframe
 from app.core.types import MarketData, OHLCV
 from app.domain.backtest.metrics import (
-    BacktestMetrics, EquityPoint, TradeRecord, compute_metrics,
+    BacktestMetrics, EquityPoint, PricePoint, TradeRecord, compute_metrics,
 )
 from app.domain.strategy.base import StrategyBase
 
@@ -23,6 +23,7 @@ class BacktestResult:
     metrics: BacktestMetrics
     equity_curve: List[EquityPoint]
     trades: List[TradeRecord]
+    prices: List[PricePoint]
 
 
 @dataclass
@@ -62,6 +63,7 @@ class BacktestEngine:
         position: Optional[_Position] = None
         equity_curve: List[EquityPoint] = []
         trades: List[TradeRecord] = []
+        prices: List[PricePoint] = []
 
         logger.info(
             "backtest.run.start",
@@ -124,16 +126,15 @@ class BacktestEngine:
                     )
                     capital += size * (fill_price - commission)
 
-            # Mark-to-market equity
-            unrealized = 0.0
-            if position is not None:
-                if position.side == "long":
-                    unrealized = position.size * (current.close - position.entry_price)
-                else:
-                    unrealized = position.size * (position.entry_price - current.close)
-
-            equity = capital + (position.size * current.close if position else 0) + unrealized
+            # Mark-to-market equity (cash + current market value of any open position)
+            if position is None:
+                equity = capital
+            elif position.side == "long":
+                equity = capital + position.size * current.close
+            else:
+                equity = capital - position.size * current.close
             equity_curve.append(EquityPoint(timestamp=ts_ms, value=equity))
+            prices.append(PricePoint(timestamp=ts_ms, close=current.close))
 
         # Close any open position at end of data
         if position is not None:
@@ -161,17 +162,19 @@ class BacktestEngine:
             metrics=metrics,
             equity_curve=equity_curve,
             trades=trades,
+            prices=prices,
         )
 
     def _close_position(self, pos: _Position, price: float, ts_ms: int) -> TradeRecord:
-        commission = price * self._commission_pct
+        entry_commission = pos.entry_price * self._commission_pct
+        exit_commission = price * self._commission_pct
         if pos.side == "long":
-            proceeds = pos.size * (price - commission)
-            cost = pos.size * pos.entry_price
+            proceeds = pos.size * (price - exit_commission)
+            cost = pos.size * (pos.entry_price + entry_commission)
             pnl = proceeds - cost
         else:
-            proceeds = pos.size * pos.entry_price
-            cost = pos.size * (price + commission)
+            proceeds = pos.size * (pos.entry_price - entry_commission)
+            cost = pos.size * (price + exit_commission)
             pnl = proceeds - cost
 
         pnl_pct = pnl / (pos.size * pos.entry_price) * 100

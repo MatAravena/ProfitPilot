@@ -26,8 +26,13 @@ export interface BacktestMetrics {
 }
 
 export interface EquityPoint {
-  timestamp: number  // Unix seconds
+  timestamp: number  // Unix ms
   value: number
+}
+
+export interface PricePoint {
+  timestamp: number  // Unix ms
+  close: number
 }
 
 export interface TradeRecord {
@@ -38,8 +43,8 @@ export interface TradeRecord {
   size: number
   pnl: number
   pnl_pct: number
-  entry_time: number
-  exit_time: number
+  entry_time: number  // Unix ms
+  exit_time: number   // Unix ms
 }
 
 export interface BacktestResponse {
@@ -50,6 +55,7 @@ export interface BacktestResponse {
   metrics: BacktestMetrics
   equity_curve: EquityPoint[]
   trades: TradeRecord[]
+  prices: PricePoint[]
 }
 
 export interface StrategyParamDef {

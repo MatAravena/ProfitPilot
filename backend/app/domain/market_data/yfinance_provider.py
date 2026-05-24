@@ -1,6 +1,6 @@
 from __future__ import annotations
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional
 
 import structlog
@@ -74,6 +74,12 @@ async def fetch_ohlcv(
     yf_symbol = normalize_symbol(symbol)
     interval = _YF_INTERVAL[timeframe]
 
+    # If end is given but start is not, compute start so we fetch ~limit bars.
+    # yfinance returns only ~30 days when start=None and end is explicit.
+    if start is None and end is not None:
+        days_needed = limit * _BAR_DAYS[timeframe] * 1.2
+        start = end - timedelta(days=max(int(days_needed), 30))
+
     if start is None and end is None:
         days_needed = limit * _BAR_DAYS[timeframe] * 1.2  # 20% buffer
         if days_needed <= 7:
@@ -146,6 +152,8 @@ async def fetch_ohlcv(
         for r in rows
     ]
 
-    bars = bars[-limit:] if len(bars) > limit else bars
+    # Only enforce limit when no explicit date range was requested
+    if not start and not end:
+        bars = bars[-limit:] if len(bars) > limit else bars
     logger.info("yfinance.fetched", symbol=yf_symbol, bars=len(bars))
     return bars

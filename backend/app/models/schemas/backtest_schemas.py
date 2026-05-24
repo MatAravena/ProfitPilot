@@ -2,7 +2,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from app.core.datetime_utils import to_naive_utc
 
 
 class BacktestRequest(BaseModel):
@@ -14,6 +16,11 @@ class BacktestRequest(BaseModel):
     initial_capital: float = Field(10_000.0, gt=0)
     commission_pct: float = Field(0.001, ge=0)
     parameters: Dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("start", "end", mode="after")
+    @classmethod
+    def normalize_tz(cls, v: Optional[datetime]) -> Optional[datetime]:
+        return to_naive_utc(v)
 
 
 class TradeRecordResponse(BaseModel):
@@ -47,6 +54,11 @@ class EquityPointResponse(BaseModel):
     value: float
 
 
+class PricePointResponse(BaseModel):
+    timestamp: int  # Unix ms
+    close: float
+
+
 class BacktestResponse(BaseModel):
     strategy_name: str
     symbol: str
@@ -55,6 +67,7 @@ class BacktestResponse(BaseModel):
     metrics: BacktestMetricsResponse
     equity_curve: List[EquityPointResponse]
     trades: List[TradeRecordResponse]
+    prices: List[PricePointResponse]
 
 
 class StrategyParamDef(BaseModel):

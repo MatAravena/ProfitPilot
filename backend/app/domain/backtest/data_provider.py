@@ -1,5 +1,5 @@
 from __future__ import annotations
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional
 
 import httpx
@@ -49,13 +49,58 @@ async def fetch_ohlcv(
     # Fallback: Bybit public API (crypto only)
     if symbol.upper() in _BYBIT_SYMBOLS:
         logger.info("data_provider.bybit_fallback", symbol=symbol)
-        return await _fetch_bybit(symbol=symbol, timeframe=timeframe, limit=limit, start=start, end=end)
+        return await _fetch_bybit_paginated(symbol=symbol, timeframe=timeframe, start=start, end=end)
 
     logger.warning("data_provider.no_source", symbol=symbol)
     return []
 
 
-async def _fetch_bybit(
+async def _fetch_bybit_paginated(
+    symbol: str,
+    timeframe: Timeframe,
+    start: Optional[datetime] = None,
+    end: Optional[datetime] = None,
+) -> List[OHLCV]:
+    """Paginate Bybit's 1000-bar-per-request limit to fetch the full requested range."""
+    if start is None:
+        # No lower bound — a single page is sufficient
+        return await _fetch_bybit_page(symbol, timeframe, limit=1000, start=None, end=end)
+
+    all_bars: List[OHLCV] = []
+    current_end = end
+
+    for _ in range(20):  # safety cap: 20 pages × 1000 = 20,000 bars (~55 years of daily data)
+        page = await _fetch_bybit_page(symbol, timeframe, limit=1000, start=start, end=current_end)
+        if not page:
+            break
+
+        # Pages come back chronologically; prepend so all_bars stays sorted
+        all_bars = page + all_bars
+
+        if len(page) < 1000 or page[0].timestamp <= start:
+            break
+
+        # Move the window back to just before the earliest bar in this page
+        current_end = page[0].timestamp - timedelta(milliseconds=1)
+
+    # Deduplicate (overlap safety) and filter to requested bounds
+    seen: set = set()
+    result: List[OHLCV] = []
+    for bar in all_bars:
+        if bar.timestamp not in seen:
+            seen.add(bar.timestamp)
+            result.append(bar)
+
+    if start:
+        result = [b for b in result if b.timestamp >= start]
+    if end:
+        result = [b for b in result if b.timestamp <= end]
+
+    logger.info("bybit.paginated.fetched", symbol=symbol, bars=len(result))
+    return result
+
+
+async def _fetch_bybit_page(
     symbol: str,
     timeframe: Timeframe,
     limit: int = 1000,
@@ -97,5 +142,5 @@ async def _fetch_bybit(
             timeframe=timeframe,
         ))
 
-    logger.info("bybit.fetched", symbol=symbol, bars=len(bars))
+    logger.info("bybit.page.fetched", symbol=symbol, bars=len(bars))
     return bars

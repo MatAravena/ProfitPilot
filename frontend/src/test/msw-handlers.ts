@@ -45,8 +45,12 @@ export const handlers = [
         final_equity: 11250,
       },
       equity_curve: [
-        { timestamp: 1700000000, value: 10000 },
-        { timestamp: 1700086400, value: 11250 },
+        { timestamp: 1700000000000, value: 10000 },
+        { timestamp: 1700086400000, value: 11250 },
+      ],
+      prices: [
+        { timestamp: 1700000000000, close: 36000 },
+        { timestamp: 1700086400000, close: 37200 },
       ],
       trades: [],
     })

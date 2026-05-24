@@ -3,6 +3,11 @@ import math
 from typing import List, NamedTuple
 
 
+class PricePoint(NamedTuple):
+    timestamp: int  # Unix ms
+    close: float
+
+
 class EquityPoint(NamedTuple):
     timestamp: int   # Unix ms
     value: float

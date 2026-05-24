@@ -1,5 +1,8 @@
 version: "3.9"
 
+# Local dev infrastructure — run this, then start backend + frontend manually.
+# Full-stack Docker (api/worker/frontend) lives in docker/docker-compose.yml.
+
 services:
 
   # ── PostgreSQL + TimescaleDB ────────────────────────────────────────────────
@@ -32,67 +35,67 @@ services:
       timeout: 3s
       retries: 5
 
-  # ── FastAPI Backend ─────────────────────────────────────────────────────────
-  api:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    ports:
-      - "8000:8000"
-    env_file:
-      - ./backend/.env
-    volumes:
-      - ./backend:/app
-      - model_artifacts:/app/model_artifacts
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+  # # ── FastAPI Backend ─────────────────────────────────────────────────────────
+  # api:
+  #   build:
+  #     context: ./backend
+  #     dockerfile: Dockerfile
+  #   ports:
+  #     - "8000:8000"
+  #   env_file:
+  #     - ./backend/.env
+  #   volumes:
+  #     - ./backend:/app
+  #     - model_artifacts:/app/model_artifacts
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #   command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
-  # ── Celery Worker (backtest jobs, model training) ───────────────────────────
-  worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    env_file:
-      - ./backend/.env
-    volumes:
-      - ./backend:/app
-      - model_artifacts:/app/model_artifacts
-    depends_on:
-      - redis
-      - db
-    command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=4
+  # # ── Celery Worker (backtest jobs, model training) ───────────────────────────
+  # worker:
+  #   build:
+  #     context: ./backend
+  #     dockerfile: Dockerfile
+  #   env_file:
+  #     - ./backend/.env
+  #   volumes:
+  #     - ./backend:/app
+  #     - model_artifacts:/app/model_artifacts
+  #   depends_on:
+  #     - redis
+  #     - db
+  #   command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=4
 
-  # ── Celery Beat (scheduled jobs) ────────────────────────────────────────────
-  beat:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    env_file:
-      - ./backend/.env
-    volumes:
-      - ./backend:/app
-    depends_on:
-      - redis
-      - db
-    command: celery -A app.workers.celery_app beat --loglevel=info
+  # # ── Celery Beat (scheduled jobs) ────────────────────────────────────────────
+  # beat:
+  #   build:
+  #     context: ./backend
+  #     dockerfile: Dockerfile
+  #   env_file:
+  #     - ./backend/.env
+  #   volumes:
+  #     - ./backend:/app
+  #   depends_on:
+  #     - redis
+  #     - db
+  #   command: celery -A app.workers.celery_app beat --loglevel=info
 
-  # ── React Frontend ──────────────────────────────────────────────────────────
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    ports:
-      - "5173:5173"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    command: npm run dev -- --host
+  # # ── React Frontend ──────────────────────────────────────────────────────────
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #   ports:
+  #     - "5173:5173"
+  #   volumes:
+  #     - ./frontend:/app
+  #     - /app/node_modules
+  #   command: npm run dev -- --host
 
 volumes:
   pgdata:
   redisdata:
-  model_artifacts:
+  # model_artifacts:
