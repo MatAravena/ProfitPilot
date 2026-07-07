@@ -10,6 +10,7 @@ from app.domain.strategy.loader import get_all_strategy_classes
 from app.models.schemas.strategy_schemas import (
     CreateStrategyRequest,
     StrategyInstanceResponse,
+    UpdateStrategyConfigRequest,
     UpdateStrategyStatusRequest,
 )
 from app.repositories.strategy_instance_repository import StrategyInstanceRepository
@@ -29,7 +30,8 @@ async def list_strategy_classes():
 
 @router.get("", response_model=List[StrategyInstanceResponse])
 async def list_strategies(svc: Annotated[StrategyService, Depends(_get_service)]):
-    return await svc.list(LOCAL_USER_ID)
+    instances = await svc.list(LOCAL_USER_ID)
+    return [StrategyInstanceResponse.from_instance(i) for i in instances]
 
 
 @router.post("", response_model=StrategyInstanceResponse, status_code=201)
@@ -40,7 +42,27 @@ async def create_strategy(
 ):
     instance = await svc.create(LOCAL_USER_ID, body)
     await db.commit()
-    return instance
+    return StrategyInstanceResponse.from_instance(instance)
+
+
+@router.patch("/{strategy_id}/config", response_model=StrategyInstanceResponse)
+async def update_strategy_config(
+    strategy_id: UUID,
+    body: UpdateStrategyConfigRequest,
+    svc: Annotated[StrategyService, Depends(_get_service)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    from app.db.base import AsyncSessionLocal
+    from app.services.strategy_executor import executor
+
+    try:
+        instance = await svc.update_config(strategy_id, LOCAL_USER_ID, body)
+        await db.commit()
+        # Restart the loop (if running) so the new config takes effect immediately.
+        executor.notify_config_change(instance, AsyncSessionLocal)
+        return StrategyInstanceResponse.from_instance(instance)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Strategy not found")
 
 
 @router.patch("/{strategy_id}/status", response_model=StrategyInstanceResponse)
@@ -58,7 +80,7 @@ async def update_strategy_status(
         await db.commit()
         # Start or stop the execution loop for this strategy
         executor.notify_status_change(instance, AsyncSessionLocal)
-        return instance
+        return StrategyInstanceResponse.from_instance(instance)
     except KeyError:
         raise HTTPException(status_code=404, detail="Strategy not found")
 

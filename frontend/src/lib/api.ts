@@ -9,6 +9,7 @@ import type {
   StrategyInstance,
   StrategyClassDef,
   CreateStrategyPayload,
+  ExecutionConfig,
   SignalRecord,
   PortfolioSnapshotPoint,
 } from '@/types'
@@ -19,6 +20,8 @@ import type {
   AvailableStrategiesResponse,
 } from '@/types/backtest'
 
+import { ApiError, ErrorCode, type FieldError } from '@/lib/errors'
+
 const BASE_URL = '/api/v1'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -27,10 +30,39 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
   })
   if (!res.ok) {
-    const error = await res.text()
-    throw new Error(error || `HTTP ${res.status}`)
+    throw await parseError(res)
   }
+  // 204 No Content etc. — nothing to parse.
+  if (res.status === 204) return undefined as T
   return res.json() as Promise<T>
+}
+
+/** Parse the backend's structured `{ error: { code, message, details } }` body. */
+async function parseError(res: Response): Promise<ApiError> {
+  const fallbackCode = res.status === 404 ? ErrorCode.NotFound : ErrorCode.BadRequest
+  const raw = await res.text()
+  if (!raw) return new ApiError(fallbackCode, `HTTP ${res.status}`, res.status)
+
+  try {
+    const body = JSON.parse(raw)
+    const e = body?.error
+    if (e && typeof e === 'object') {
+      const fields = e.details?.fields as FieldError[] | undefined
+      return new ApiError(
+        e.code ?? fallbackCode,
+        e.message ?? `HTTP ${res.status}`,
+        res.status,
+        fields,
+      )
+    }
+    // Legacy `{ detail: "..." }` shape (plain FastAPI HTTPException).
+    if (typeof body?.detail === 'string') {
+      return new ApiError(fallbackCode, body.detail, res.status)
+    }
+  } catch {
+    // Non-JSON body — fall through to raw text.
+  }
+  return new ApiError(fallbackCode, raw, res.status)
 }
 
 export const api = {
@@ -87,6 +119,11 @@ export const api = {
       request<StrategyInstance>(`/strategies/${id}/status`, {
         method: 'PATCH',
         body: JSON.stringify({ status }),
+      }),
+    updateConfig: (id: string, body: ExecutionConfig) =>
+      request<StrategyInstance>(`/strategies/${id}/config`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
       }),
     delete: (id: string) => request<void>(`/strategies/${id}`, { method: 'DELETE' }),
   },

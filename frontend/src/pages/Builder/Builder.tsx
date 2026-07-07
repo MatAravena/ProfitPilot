@@ -8,6 +8,8 @@ import {
 import Editor from '@monaco-editor/react'
 import type { OnMount } from '@monaco-editor/react'
 import { api } from '@/lib/api'
+import { friendlyError } from '@/lib/errors'
+import { useToastStore } from '@/stores/toast'
 import type { BacktestResponse, BacktestMetrics } from '@/types/backtest'
 import { cn, formatCurrency, formatPercent } from '@/lib/utils'
 import { EquityChart } from '@/components/charts/EquityChart'
@@ -68,14 +70,18 @@ export function Builder() {
     monaco.editor.setTheme('profitpilot-dark')
   }
 
+  const toastError = useToastStore((s) => s.error)
+
   const runMutation = useMutation({
     mutationFn: () => api.builder.run({ code, symbol, timeframe, initial_capital: capital, commission_pct: commission / 100 }),
     onSuccess: (data) => setResult(data),
+    onError: (err) => toastError(err),
   })
 
   const generateMutation = useMutation({
     mutationFn: () => api.builder.generate({ description, symbol, timeframe }),
     onSuccess: (data) => { setCode(data.code); setAiExplanation(data.explanation) },
+    onError: (err) => toastError(err),
   })
 
   function handleCopy() {
@@ -124,7 +130,7 @@ export function Builder() {
               </button>
             </div>
             {generateMutation.error && (
-              <p className="text-xs text-danger">{(generateMutation.error as Error).message}</p>
+              <p className="text-xs text-danger">{friendlyError(generateMutation.error)}</p>
             )}
             {aiExplanation && (
               <p className="text-[11px] text-text-muted border-l-2 border-primary/40 pl-2">{aiExplanation}</p>
@@ -173,7 +179,7 @@ export function Builder() {
 
           {runMutation.error && (
             <p className="text-xs text-danger bg-danger/10 rounded-lg px-4 py-2.5">
-              {(runMutation.error as Error).message}
+              {friendlyError(runMutation.error)}
             </p>
           )}
         </div>

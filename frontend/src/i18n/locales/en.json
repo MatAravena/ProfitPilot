@@ -1,11 +1,28 @@
 {
   "nav": {
     "dashboard": "Dashboard",
+    "trade": "Trade",
     "portfolio": "Portfolio",
     "backtest": "Backtest",
     "strategies": "Strategies",
     "builder": "Builder",
     "settings": "Settings"
+  },
+  "trade": {
+    "load": "Load",
+    "loading": "Loading market data…",
+    "loadError": "Failed to load {{symbol}}. Try another symbol or timeframe."
+  },
+  "errors": {
+    "generic": "Something went wrong. Please try again.",
+    "notFound": "Not found.",
+    "upstream": "A data provider or broker is unavailable. Please try again shortly.",
+    "internal": "Server error. Please try again later.",
+    "fieldInvalid": "{{field}}: {{message}}",
+    "notEnoughData": "Not enough data for that range — try a wider date range or a different symbol.",
+    "symbolNotFound": "Symbol not found. Check the ticker and try again.",
+    "badTimeframe": "Unsupported timeframe for this symbol.",
+    "rateLimited": "Rate limited by the data provider. Wait a moment and retry."
   },
   "landing": {
     "signIn": "Sign in",
@@ -20,7 +37,11 @@
       "connected": "Connected",
       "today": "+$2,341.18 (1.91%) today"
     },
-    "kpis": { "drawdown": "Drawdown", "winRate": "Win Rate", "strategies": "Strategies" },
+    "kpis": {
+      "drawdown": "Drawdown",
+      "winRate": "Win Rate",
+      "strategies": "Strategies"
+    },
     "features": {
       "mlTitle": "ML Forecasting",
       "mlBody": "PyTorch, XGBoost, and LightGBM signals feeding directly into strategy execution.",
@@ -46,8 +67,12 @@
       "positions": "Open Positions"
     },
     "table": {
-      "symbol": "Symbol", "broker": "Broker", "size": "Size",
-      "entry": "Entry", "current": "Current", "unrealizedPnl": "Unr. P&L"
+      "symbol": "Symbol",
+      "broker": "Broker",
+      "size": "Size",
+      "entry": "Entry",
+      "current": "Current",
+      "unrealizedPnl": "Unr. P&L"
     },
     "subs": {
       "openPositions": "open positions",
@@ -75,19 +100,32 @@
     "emptyState": "Configure and run a backtest to see results",
     "loadingState": "Fetching data and running simulation…",
     "metrics": {
-      "totalReturn": "Total Return", "sharpe": "Sharpe Ratio", "maxDrawdown": "Max Drawdown",
-      "winRate": "Win Rate", "totalTrades": "Total Trades", "profitFactor": "Profit Factor",
-      "avgWin": "Avg Win", "avgLoss": "Avg Loss"
+      "totalReturn": "Total Return",
+      "sharpe": "Sharpe Ratio",
+      "maxDrawdown": "Max Drawdown",
+      "winRate": "Win Rate",
+      "totalTrades": "Total Trades",
+      "profitFactor": "Profit Factor",
+      "avgWin": "Avg Win",
+      "avgLoss": "Avg Loss"
     },
     "equityCurve": "Equity Curve",
     "tradeHistory": "Trade History ({{count}})",
     "table": {
-      "side": "Side", "entry": "Entry", "exit": "Exit",
-      "size": "Size", "pnl": "P&L", "pnlPct": "P&L %"
+      "side": "Side",
+      "entry": "Entry",
+      "exit": "Exit",
+      "size": "Size",
+      "pnl": "P&L",
+      "pnlPct": "P&L %"
     }
   },
   "portfolio": {
-    "kpis": { "equity": "Total Equity", "cash": "Cash Balance", "pnl": "Total P&L" },
+    "kpis": {
+      "equity": "Total Equity",
+      "cash": "Cash Balance",
+      "pnl": "Total P&L"
+    },
     "equityOver": "Equity Over Time",
     "snapshots": "{{count}} snapshots",
     "noHistory": "No equity history yet.",
@@ -96,14 +134,26 @@
     "activePositions": "{{count}} active",
     "noPositions": "No open positions",
     "table": {
-      "symbol": "Symbol", "broker": "Broker", "qty": "Qty", "entry": "Entry",
-      "current": "Current", "unrealizedPnl": "Unr. P&L", "pct": "%"
+      "symbol": "Symbol",
+      "broker": "Broker",
+      "qty": "Qty",
+      "entry": "Entry",
+      "current": "Current",
+      "unrealizedPnl": "Unr. P&L",
+      "pct": "%"
     },
     "placeOrder": {
       "title": "Place Order",
       "noBroker": "Connect a broker first to place orders.",
-      "broker": "Broker", "symbol": "Symbol", "quantity": "Quantity", "limitPrice": "Limit Price",
-      "buy": "Buy", "sell": "Sell", "market": "market", "limit": "limit", "placing": "Placing…"
+      "broker": "Broker",
+      "symbol": "Symbol",
+      "quantity": "Quantity",
+      "limitPrice": "Limit Price",
+      "buy": "Buy",
+      "sell": "Sell",
+      "market": "market",
+      "limit": "limit",
+      "placing": "Placing…"
     }
   },
   "strategies": {
@@ -116,18 +166,54 @@
     "empty": "No strategies yet",
     "emptyHint": "Create a strategy, attach a broker connection, and start paper trading.",
     "card": {
-      "deleteConfirm": "Delete?", "yes": "Yes", "no": "No",
+      "deleteConfirm": "Delete?",
+      "yes": "Yes",
+      "no": "No",
       "noBroker": "No broker connected",
-      "errors_one": "{{count}} error", "errors_other": "{{count}} errors",
-      "startPaper": "Start Paper", "goLive": "Go Live", "pause": "Pause"
+      "errors_one": "{{count}} error",
+      "errors_other": "{{count}} errors",
+      "startPaper": "Start Paper",
+      "goLive": "Go Live",
+      "pause": "Pause"
     },
     "dialog": {
-      "title": "New Strategy", "strategy": "Strategy",
-      "label": "Label", "labelOptional": "(optional)",
-      "symbol": "Symbol", "timeframe": "Timeframe",
-      "brokerConnection": "Broker Connection", "parameters": "Parameters",
+      "title": "New Strategy",
+      "strategy": "Strategy",
+      "label": "Label",
+      "labelOptional": "(optional)",
+      "symbol": "Symbol",
+      "timeframe": "Timeframe",
+      "brokerConnection": "Broker Connection",
+      "parameters": "Parameters",
       "noConnection": "None (paper simulation)",
-      "cancel": "Cancel", "creating": "Creating…", "create": "Create Strategy"
+      "cancel": "Cancel",
+      "creating": "Creating…",
+      "create": "Create Strategy"
+    },
+    "config": {
+      "title": "Risk & execution",
+      "edit": "Edit config",
+      "editTitle": "Risk & execution",
+      "save": "Save",
+      "saving": "Saving...",
+      "saved": "Config updated",
+      "positionSize": "Position size",
+      "stopLoss": "Stop loss",
+      "takeProfit": "Take profit",
+      "maxPositions": "Max positions",
+      "dailyDrawdown": "Daily drawdown",
+      "totalDrawdown": "Total drawdown",
+      "maxOrdersMin": "Orders / min",
+      "pollSeconds": "Poll interval (s)",
+      "allowShort": "Allow short",
+      "killSwitch": "Kill switch",
+      "optional": "(optional)",
+      "none": "None",
+      "auto": "Auto",
+      "sizeShort": "Size",
+      "slShort": "SL",
+      "tpShort": "TP",
+      "shortShort": "Short"
     }
   },
   "builder": {
@@ -136,26 +222,40 @@
     "ai": {
       "title": "Generate with AI",
       "placeholder": "e.g. \"RSI oversold bounce with volume confirmation\"",
-      "generate": "Generate", "generating": "Generating…"
+      "generate": "Generate",
+      "generating": "Generating…"
     },
     "editor": {
       "available": "# Available: StrategyBase, signal(), LONG, SHORT, CLOSE, NEUTRAL, math, statistics",
-      "copy": "Copy", "copied": "Copied"
+      "copy": "Copy",
+      "copied": "Copied"
     },
     "config": {
-      "title": "Backtest Config", "symbol": "Symbol",
-      "timeframe": "Timeframe", "capital": "Capital ($)", "commission": "Commission (%)"
+      "title": "Backtest Config",
+      "symbol": "Symbol",
+      "timeframe": "Timeframe",
+      "capital": "Capital ($)",
+      "commission": "Commission (%)"
     },
-    "run": "Run Backtest", "running": "Running…",
+    "run": "Run Backtest",
+    "running": "Running…",
     "metrics": {
-      "totalReturn": "Total Return", "sharpe": "Sharpe", "maxDd": "Max DD",
-      "winRate": "Win Rate", "trades": "Trades", "profitFactor": "Profit Factor"
+      "totalReturn": "Total Return",
+      "sharpe": "Sharpe",
+      "maxDd": "Max DD",
+      "winRate": "Win Rate",
+      "trades": "Trades",
+      "profitFactor": "Profit Factor"
     },
     "equityCurve": "Equity Curve",
     "tradeHistory": "Trade History ({{count}})",
     "table": {
-      "side": "Side", "entry": "Entry", "exit": "Exit",
-      "size": "Size", "pnl": "P&L", "pnlPct": "P&L %"
+      "side": "Side",
+      "entry": "Entry",
+      "exit": "Exit",
+      "size": "Size",
+      "pnl": "P&L",
+      "pnlPct": "P&L %"
     }
   },
   "settings": {
@@ -166,18 +266,28 @@
     "noBrokers": "No brokers connected. Add one to start trading.",
     "active": "Active",
     "form": {
-      "title": "Add Broker", "broker": "Broker", "portfolioType": "Portfolio Type",
+      "title": "Add Broker",
+      "broker": "Broker",
+      "portfolioType": "Portfolio Type",
       "paper": "Paper / Test",
       "paperDesc": "Simulate trades with fake money. Safe for testing strategies.",
       "live": "Real / Live",
       "liveDesc": "Executes real orders with real money. Cannot be undone.",
       "liveWarning": "Live mode executes real orders with real money. Make sure your strategy is thoroughly tested in Paper mode first.",
-      "apiKey": "API Key", "apiKeyPlaceholder": "Paste your API key…",
-      "secretKey": "Secret Key", "secretKeyPlaceholder": "Paste your secret key…",
+      "apiKey": "API Key",
+      "apiKeyPlaceholder": "Paste your API key…",
+      "secretKey": "Secret Key",
+      "secretKeyPlaceholder": "Paste your secret key…",
       "secretKeyHint": "Keys are encrypted before storage. Never shared.",
-      "label": "Label (optional)", "labelPlaceholder": "e.g. My Bybit Paper Account",
-      "connecting": "Connecting…", "connect": "Connect", "cancel": "Cancel"
+      "label": "Label (optional)",
+      "labelPlaceholder": "e.g. My Bybit Paper Account",
+      "connecting": "Connecting…",
+      "connect": "Connect",
+      "cancel": "Cancel"
     },
-    "badge": { "paper": "Paper", "live": "Live" }
+    "badge": {
+      "paper": "Paper",
+      "live": "Live"
+    }
   }
 }

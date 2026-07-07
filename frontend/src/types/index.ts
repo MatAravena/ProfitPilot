@@ -119,6 +119,21 @@ export interface ConnectBrokerPayload {
 // Strategy instance (mirrors StrategyInstanceResponse from backend)
 export type StrategyStatus = 'draft' | 'paper' | 'live' | 'paused' | 'archived' | 'halted'
 
+// Per-strategy execution / risk envelope (mirrors backend ExecutionConfig).
+// All _pct fields are fractions (0.02 = 2%).
+export interface ExecutionConfig {
+  size_pct: number
+  stop_loss_pct: number
+  take_profit_pct: number | null
+  max_open_positions: number
+  max_daily_drawdown_pct: number
+  max_total_drawdown_pct: number
+  max_orders_per_minute: number
+  allow_short: boolean
+  kill_switch_enabled: boolean
+  poll_seconds: number | null
+}
+
 export interface StrategyInstance {
   id: string
   class_name: string
@@ -128,6 +143,7 @@ export interface StrategyInstance {
   broker_connection_id: string | null
   status: StrategyStatus
   parameters: Record<string, number | string | boolean>
+  execution: ExecutionConfig
   created_at: string
   updated_at: string
   last_signal_at: string | null
@@ -174,6 +190,7 @@ export interface CreateStrategyPayload {
   timeframe: string
   broker_connection_id: string | null
   parameters: Record<string, number | string | boolean>
+  execution?: ExecutionConfig
 }
 
 export interface PlaceOrderPayload {

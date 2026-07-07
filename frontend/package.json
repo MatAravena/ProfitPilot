@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "test": "vitest",
     "fe": "vite",
-    "be": "cd ../backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
+    "be": "cd ../backend && python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
     "start": "concurrently -n FE,BE -c cyan,green \"npm run fe\" \"npm run be\""
   },
   "dependencies": {
@@ -31,6 +31,7 @@
     "react-i18next": "^17.0.6",
     "react-router-dom": "^6.26.2",
     "recharts": "^3.8.1",
+    "lightweight-charts": "^4.2.0",
     "tailwind-merge": "^2.5.2",
     "zustand": "^5.0.0"
   },

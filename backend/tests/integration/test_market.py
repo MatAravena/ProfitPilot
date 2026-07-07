@@ -11,7 +11,7 @@ from tests.conftest import make_bars
 @pytest.mark.asyncio
 async def test_ohlcv_bybit_source(client):
     fake = make_bars([50_000.0] * 10)
-    with patch("app.api.routes.market._fetch_bybit", new=AsyncMock(return_value=fake)):
+    with patch("app.api.routes.market._fetch_bybit_page", new=AsyncMock(return_value=fake)):
         resp = await client.get("/api/v1/market/ohlcv?symbol=BTCUSDT&timeframe=1d&limit=10&source=bybit")
     assert resp.status_code == 200
     data = resp.json()
@@ -29,7 +29,7 @@ async def test_ohlcv_unknown_timeframe_returns_400(client):
 @pytest.mark.asyncio
 async def test_ohlcv_response_shape(client):
     fake = make_bars([1.0, 2.0, 3.0])
-    with patch("app.api.routes.market._fetch_bybit", new=AsyncMock(return_value=fake)):
+    with patch("app.api.routes.market._fetch_bybit_page", new=AsyncMock(return_value=fake)):
         resp = await client.get("/api/v1/market/ohlcv?symbol=BTCUSDT&timeframe=1d&limit=3&source=bybit")
     assert resp.status_code == 200
     for candle in resp.json():

@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { Landing } from '@/pages/Landing/Landing'
 import { Dashboard } from '@/pages/Dashboard/Dashboard'
+import { Trade } from '@/pages/Trade/Trade'
 import { Portfolio } from '@/pages/Portafolio/Portfolio'
 import { Backtests } from '@/pages/Backtests/Backtests'
 import { Strategies } from '@/pages/Strategies/Strategies'
@@ -15,6 +16,7 @@ export default function App() {
         <Route path="/" element={<Landing />} />
         <Route element={<AppLayout />}>
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/trade" element={<Trade />} />
           <Route path="/portfolio" element={<Portfolio />} />
           <Route path="/backtests" element={<Backtests />} />
           <Route path="/strategies" element={<Strategies />} />

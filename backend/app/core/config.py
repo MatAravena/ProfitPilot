@@ -32,6 +32,16 @@ class Settings(BaseSettings):
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
 
+    # Market data
+    # Alpaca powers stock/ETF candles (free account API keys required). Crypto uses
+    # Bybit's public API (no keys). When ALPACA_API_KEY is empty, stock symbols fall
+    # back to Yahoo Finance.
+    ALPACA_API_KEY: str = ""
+    ALPACA_SECRET_KEY: str = ""
+    ALPACA_DATA_FEED: str = "iex"   # free feed; "sip" requires a paid subscription
+    # Hot-cache TTL for the most-recent (unbounded) candle requests, in seconds.
+    MARKET_CACHE_TTL_SECONDS: int = 60
+
     # Celery
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/2"
@@ -51,6 +61,10 @@ class Settings(BaseSettings):
     DEFAULT_MAX_DAILY_DRAWDOWN_PCT: float = 0.03
     DEFAULT_MAX_TOTAL_DRAWDOWN_PCT: float = 0.10
     DEFAULT_STOP_LOSS_PCT: float = 0.015
+    DEFAULT_MAX_ORDERS_PER_MINUTE: int = 10
+
+    # Paper-trading simulator
+    SIM_STARTING_EQUITY: float = 100_000.0    # virtual starting cash for paper strategies
 
     # JWT
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24h

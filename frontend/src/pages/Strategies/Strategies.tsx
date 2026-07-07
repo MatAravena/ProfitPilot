@@ -3,10 +3,18 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import {
   TrendingUp, Play, Pause, Trash2, Plus, X,
-  ChevronDown, AlertTriangle, FlaskConical, Radio,
+  ChevronDown, AlertTriangle, FlaskConical, Radio, SlidersHorizontal,
 } from 'lucide-react'
 import { api } from '@/lib/api'
-import type { StrategyInstance, StrategyClassDef, CreateStrategyPayload, BrokerConnection } from '@/types'
+import { useToastStore } from '@/stores/toast'
+import {
+  ExecutionConfigForm, DEFAULT_EXECUTION_CONFIG,
+} from '@/components/strategy/ExecutionConfigForm'
+import type {
+  StrategyInstance, StrategyClassDef, CreateStrategyPayload, BrokerConnection, ExecutionConfig,
+} from '@/types'
+
+const pct = (f: number) => `${Math.round(f * 1e6) / 1e4}%`
 
 const STATUS_CONFIG: Record<string, { label: string; className: string; icon?: React.ReactNode }> = {
   draft:    { label: 'Draft',
@@ -50,6 +58,8 @@ function CreateDialog({ classes, brokers, onClose, onCreate, isPending }: Create
   const [symbol, setSymbol] = useState('BTCUSDT')
   const [timeframe, setTimeframe] = useState('1d')
   const [brokerId, setBrokerId] = useState<string>('')
+  const [showConfig, setShowConfig] = useState(false)
+  const [execution, setExecution] = useState<ExecutionConfig>(DEFAULT_EXECUTION_CONFIG)
   const [params, setParams] = useState<Record<string, number | string>>(() => {
     const defaults: Record<string, number | string> = {}
     classes[0]?.parameters.forEach((p) => { defaults[p.key] = p.default as number | string })
@@ -67,7 +77,11 @@ function CreateDialog({ classes, brokers, onClose, onCreate, isPending }: Create
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    onCreate({ class_name: selected.class_name, label, symbol, timeframe, broker_connection_id: brokerId || null, parameters: params })
+    onCreate({ class_name: selected.class_name, label, symbol, timeframe, broker_connection_id: brokerId || null, parameters: params, execution })
+  }
+
+  function patchExecution(patch: Partial<ExecutionConfig>) {
+    setExecution((prev) => ({ ...prev, ...patch }))
   }
 
   return (
@@ -162,6 +176,20 @@ function CreateDialog({ classes, brokers, onClose, onCreate, isPending }: Create
             </div>
           )}
 
+          <div className="border-t border-border pt-3">
+            <button type="button" onClick={() => setShowConfig((v) => !v)}
+              className="flex items-center gap-1.5 text-[11px] font-medium text-text-muted uppercase tracking-wider hover:text-text transition-colors">
+              <SlidersHorizontal size={12} />
+              {t('strategies.config.title')}
+              <ChevronDown size={13} className={`transition-transform ${showConfig ? 'rotate-180' : ''}`} />
+            </button>
+            {showConfig && (
+              <div className="mt-3">
+                <ExecutionConfigForm value={execution} onChange={patchExecution} />
+              </div>
+            )}
+          </div>
+
           <div className="flex gap-2 pt-1">
             <button type="button" onClick={onClose}
               className="flex-1 px-4 py-2 rounded-lg border border-border text-sm text-text-muted hover:text-text hover:bg-surface-2 transition-colors">
@@ -183,9 +211,10 @@ interface StrategyCardProps {
   brokers: BrokerConnection[]
   onStatusChange: (id: string, status: string) => void
   onDelete: (id: string) => void
+  onEditConfig: (strategy: StrategyInstance) => void
 }
 
-function StrategyCard({ strategy, brokers, onStatusChange, onDelete }: StrategyCardProps) {
+function StrategyCard({ strategy, brokers, onStatusChange, onDelete, onEditConfig }: StrategyCardProps) {
   const { t } = useTranslation()
   const [confirmDelete, setConfirmDelete] = useState(false)
   const broker = brokers.find((b) => b.id === strategy.broker_connection_id)
@@ -220,9 +249,15 @@ function StrategyCard({ strategy, brokers, onStatusChange, onDelete }: StrategyC
             </button>
           </div>
         ) : (
-          <button onClick={() => setConfirmDelete(true)} className="text-text-muted hover:text-danger transition-colors shrink-0">
-            <Trash2 size={14} />
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button onClick={() => onEditConfig(strategy)} title={t('strategies.config.edit')}
+              className="text-text-muted hover:text-primary transition-colors">
+              <SlidersHorizontal size={14} />
+            </button>
+            <button onClick={() => setConfirmDelete(true)} className="text-text-muted hover:text-danger transition-colors">
+              <Trash2 size={14} />
+            </button>
+          </div>
         )}
       </div>
 
@@ -246,6 +281,27 @@ function StrategyCard({ strategy, brokers, onStatusChange, onDelete }: StrategyC
               {k}: {String(v)}
             </span>
           ))}
+        </div>
+      )}
+
+      {strategy.execution && (
+        <div className="flex flex-wrap gap-1.5 text-[10px]">
+          <span className="bg-surface-2 border border-border px-1.5 py-0.5 rounded">
+            {t('strategies.config.sizeShort')} <span className="font-mono text-text">{pct(strategy.execution.size_pct)}</span>
+          </span>
+          <span className="bg-surface-2 border border-border px-1.5 py-0.5 rounded">
+            {t('strategies.config.slShort')} <span className="font-mono text-danger">{pct(strategy.execution.stop_loss_pct)}</span>
+          </span>
+          {strategy.execution.take_profit_pct != null && (
+            <span className="bg-surface-2 border border-border px-1.5 py-0.5 rounded">
+              {t('strategies.config.tpShort')} <span className="font-mono text-success">{pct(strategy.execution.take_profit_pct)}</span>
+            </span>
+          )}
+          {strategy.execution.allow_short && (
+            <span className="bg-surface-2 border border-border px-1.5 py-0.5 rounded text-text-muted">
+              {t('strategies.config.shortShort')}
+            </span>
+          )}
         </div>
       )}
 
@@ -280,10 +336,54 @@ function StrategyCard({ strategy, brokers, onStatusChange, onDelete }: StrategyC
   )
 }
 
+interface ConfigDialogProps {
+  strategy: StrategyInstance
+  onClose: () => void
+  onSave: (id: string, cfg: ExecutionConfig) => void
+  isPending: boolean
+}
+
+function ConfigDialog({ strategy, onClose, onSave, isPending }: ConfigDialogProps) {
+  const { t } = useTranslation()
+  const [cfg, setCfg] = useState<ExecutionConfig>(strategy.execution ?? DEFAULT_EXECUTION_CONFIG)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div className="bg-surface border border-border rounded-xl w-full max-w-md mx-4 shadow-2xl">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <div className="flex items-center gap-2">
+            <SlidersHorizontal size={14} className="text-primary" />
+            <span className="text-sm font-semibold text-text">{t('strategies.config.editTitle')}</span>
+            <span className="text-[11px] text-text-muted font-mono">{strategy.label}</span>
+          </div>
+          <button onClick={onClose} className="text-text-muted hover:text-text"><X size={16} /></button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          <ExecutionConfigForm value={cfg} onChange={(patch) => setCfg((prev) => ({ ...prev, ...patch }))} />
+          <div className="flex gap-2 pt-1">
+            <button type="button" onClick={onClose}
+              className="flex-1 px-4 py-2 rounded-lg border border-border text-sm text-text-muted hover:text-text hover:bg-surface-2 transition-colors">
+              {t('strategies.dialog.cancel')}
+            </button>
+            <button type="button" disabled={isPending} onClick={() => onSave(strategy.id, cfg)}
+              className="flex-1 px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors">
+              {isPending ? t('strategies.config.saving') : t('strategies.config.save')}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function Strategies() {
   const { t } = useTranslation()
   const qc = useQueryClient()
+  const toastError = useToastStore((s) => s.error)
+  const toastSuccess = useToastStore((s) => s.success)
   const [showCreate, setShowCreate] = useState(false)
+  const [configTarget, setConfigTarget] = useState<StrategyInstance | null>(null)
 
   const { data: strategies = [], isLoading } = useQuery({
     queryKey: ['strategies'],
@@ -304,11 +404,23 @@ export function Strategies() {
   const createMutation = useMutation({
     mutationFn: api.strategies.create,
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['strategies'] }); setShowCreate(false) },
+    onError: (err) => toastError(err),
   })
 
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) => api.strategies.updateStatus(id, status),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['strategies'] }),
+    onError: (err) => toastError(err),
+  })
+
+  const configMutation = useMutation({
+    mutationFn: ({ id, cfg }: { id: string; cfg: ExecutionConfig }) => api.strategies.updateConfig(id, cfg),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['strategies'] })
+      setConfigTarget(null)
+      toastSuccess(t('strategies.config.saved'))
+    },
+    onError: (err) => toastError(err),
   })
 
   const deleteMutation = useMutation({
@@ -348,7 +460,8 @@ export function Strategies() {
             {active.map((s) => (
               <StrategyCard key={s.id} strategy={s} brokers={brokers}
                 onStatusChange={(id, status) => statusMutation.mutate({ id, status })}
-                onDelete={(id) => deleteMutation.mutate(id)} />
+                onDelete={(id) => deleteMutation.mutate(id)}
+                onEditConfig={setConfigTarget} />
             ))}
           </div>
         </section>
@@ -363,7 +476,8 @@ export function Strategies() {
             {inactive.map((s) => (
               <StrategyCard key={s.id} strategy={s} brokers={brokers}
                 onStatusChange={(id, status) => statusMutation.mutate({ id, status })}
-                onDelete={(id) => deleteMutation.mutate(id)} />
+                onDelete={(id) => deleteMutation.mutate(id)}
+                onEditConfig={setConfigTarget} />
             ))}
           </div>
         </section>
@@ -391,6 +505,15 @@ export function Strategies() {
           onClose={() => setShowCreate(false)}
           onCreate={(payload) => createMutation.mutate(payload)}
           isPending={createMutation.isPending}
+        />
+      )}
+
+      {configTarget && (
+        <ConfigDialog
+          strategy={configTarget}
+          onClose={() => setConfigTarget(null)}
+          onSave={(id, cfg) => configMutation.mutate({ id, cfg })}
+          isPending={configMutation.isPending}
         />
       )}
     </div>

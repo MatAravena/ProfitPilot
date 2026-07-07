@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, status
+import structlog
+from fastapi import APIRouter
 
+from app.core.errors import AppError, BacktestError, ErrorCode
 from app.domain.backtest.engine import BacktestResult
 from app.models.schemas.backtest_schemas import (
     AvailableStrategiesResponse,
@@ -15,6 +17,8 @@ from app.models.schemas.backtest_schemas import (
 from app.services.backtest_service import BacktestService
 
 router = APIRouter(prefix="/backtests", tags=["backtests"])
+
+logger = structlog.get_logger(__name__)
 
 _svc = BacktestService()
 
@@ -45,12 +49,22 @@ async def run_backtest(req: BacktestRequest):
     try:
         result: BacktestResult = await _svc.run(req)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+        # Expected: bad params / not enough data. Client-fixable → 400.
+        raise AppError(str(exc), code=ErrorCode.BAD_REQUEST) from exc
+    except AppError:
+        raise
     except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Backtest failed: {exc}",
+        # Unexpected failure inside the backtest pipeline. Log the full stack
+        # trace so we can trace where it originated; return a structured 502.
+        logger.error(
+            "backtest.failed",
+            strategy=req.strategy_name,
+            symbol=req.symbol,
+            timeframe=req.timeframe,
+            error=str(exc),
+            exc_info=exc,
         )
+        raise BacktestError(f"Backtest failed: {exc}") from exc
 
     return BacktestResponse(
         strategy_name=result.strategy_name,

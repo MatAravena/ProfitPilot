@@ -3,6 +3,8 @@ import { useQuery, useMutation } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { Play, TrendingUp, TrendingDown, Activity, BarChart2, Award, AlertTriangle } from 'lucide-react'
 import { api } from '@/lib/api'
+import { friendlyError } from '@/lib/errors'
+import { useToastStore } from '@/stores/toast'
 import type { BacktestRequest, BacktestResponse, BacktestMetrics, StrategyMeta } from '@/types/backtest'
 import type { StrategyInstance } from '@/types'
 import { formatCurrency, formatPercent } from '@/lib/utils'
@@ -45,9 +47,11 @@ export function Backtests() {
     queryFn: api.strategies.list,
   })
 
+  const toastError = useToastStore((s) => s.error)
   const run = useMutation({
     mutationFn: (req: BacktestRequest) => api.backtests.run(req),
     onSuccess: (data) => setResult(data),
+    onError: (err) => toastError(err),
   })
 
   useEffect(() => {
@@ -227,7 +231,7 @@ export function Backtests() {
 
           {run.error && (
             <p className="text-xs text-danger bg-danger/10 rounded-lg px-3 py-2">
-              {(run.error as Error).message}
+              {friendlyError(run.error)}
             </p>
           )}
 

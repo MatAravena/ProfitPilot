@@ -63,3 +63,5 @@ CLAUDE.md
 /.superpowers/**
 **/profitpilot.db
 Architecture notes.txt
+TODO.md
+docs/*

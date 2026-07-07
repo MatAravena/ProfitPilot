@@ -87,6 +87,10 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Structured error responses + traceback logging (traceback echoed only in DEBUG)
+    from app.core.errors import register_exception_handlers
+    register_exception_handlers(app)
+
     prefix = settings.API_V1_PREFIX
     app.include_router(health.router,       prefix=prefix, tags=["health"])
     app.include_router(strategies.router,   prefix=prefix, tags=["strategies"])

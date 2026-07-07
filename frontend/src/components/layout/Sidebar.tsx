@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Briefcase, TrendingUp, Settings, FlaskConical, Code2 } from 'lucide-react'
+import { LayoutDashboard, Briefcase, TrendingUp, Settings, FlaskConical, Code2, CandlestickChart } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { useUIStore } from '@/stores/ui'
@@ -12,6 +12,7 @@ export function Sidebar() {
 
   const NAV_ITEMS = [
     { to: '/dashboard',  icon: LayoutDashboard, label: t('nav.dashboard') },
+    { to: '/trade',      icon: CandlestickChart, label: t('nav.trade') },
     { to: '/portfolio',  icon: Briefcase,        label: t('nav.portfolio') },
     { to: '/backtests',  icon: FlaskConical,     label: t('nav.backtest') },
     { to: '/strategies', icon: TrendingUp,       label: t('nav.strategies') },
