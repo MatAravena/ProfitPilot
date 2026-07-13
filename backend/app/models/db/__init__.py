@@ -6,8 +6,10 @@ from app.models.db.portfolio_snapshot import PortfolioSnapshot
 from app.models.db.ohlcv_bar import OhlcvBar
 from app.models.db.order_record import OrderRecord
 from app.models.db.sim_ledger import SimAccount, SimPosition
+from app.models.db.risk_profile import RiskProfile
 
 __all__ = [
     "User", "BrokerConnection", "StrategyInstance", "SignalRecord",
     "PortfolioSnapshot", "OhlcvBar", "OrderRecord", "SimAccount", "SimPosition",
+    "RiskProfile",
 ]

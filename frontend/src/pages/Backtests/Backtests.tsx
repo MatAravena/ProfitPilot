@@ -11,7 +11,7 @@ import { formatCurrency, formatPercent } from '@/lib/utils'
 import { EquityChart } from '@/components/charts/EquityChart'
 import { MetricCard } from '@/components/backtest/MetricCard'
 import { TradeTable } from '@/components/backtest/TradeTable'
-import { TradeChart } from '@/components/backtest/TradeChart'
+import { BacktestChart } from '@/components/backtest/BacktestChart'
 
 const TIMEFRAMES = ['1m', '5m', '15m', '1h', '4h', '1d'] as const
 const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT']
@@ -54,6 +54,9 @@ export function Backtests() {
     onError: (err) => toastError(err),
   })
 
+  // Pre-fill SL/TP from the user's risk defaults (adjustable per run).
+  const { data: riskProfile } = useQuery({ queryKey: ['risk-profile'], queryFn: api.settings.getRisk })
+
   useEffect(() => {
     if (available?.strategies.length && !form.strategy_name) {
       const first = available.strategies[0]
@@ -61,6 +64,16 @@ export function Backtests() {
       setForm((f) => ({ ...f, strategy_name: first.class_name, parameters: defaultParams(first) }))
     }
   }, [available])
+
+  useEffect(() => {
+    if (riskProfile && form.stop_loss_pct === undefined) {
+      setForm((f) => ({
+        ...f,
+        stop_loss_pct: riskProfile.stop_loss_pct,
+        take_profit_pct: riskProfile.take_profit_pct,
+      }))
+    }
+  }, [riskProfile])
 
   function handleStrategyChange(value: string) {
     setSelectValue(value)
@@ -210,6 +223,37 @@ export function Backtests() {
             </div>
           </div>
 
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs text-text-muted font-medium">{t('backtests.stopLoss')}</label>
+              <input
+                type="text" inputMode="decimal"
+                value={form.stop_loss_pct != null ? String(+(form.stop_loss_pct * 100).toFixed(4)) : ''}
+                placeholder={t('backtests.none')}
+                onChange={(e) => {
+                  const raw = e.target.value
+                  const n = raw === '' ? null : Number(raw) / 100
+                  setForm((f) => ({ ...f, stop_loss_pct: raw === '' || Number.isNaN(Number(raw)) ? null : n }))
+                }}
+                className="bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs text-text-muted font-medium">{t('backtests.takeProfit')}</label>
+              <input
+                type="text" inputMode="decimal"
+                value={form.take_profit_pct != null ? String(+(form.take_profit_pct * 100).toFixed(4)) : ''}
+                placeholder={t('backtests.none')}
+                onChange={(e) => {
+                  const raw = e.target.value
+                  const n = raw === '' ? null : Number(raw) / 100
+                  setForm((f) => ({ ...f, take_profit_pct: raw === '' || Number.isNaN(Number(raw)) ? null : n }))
+                }}
+                className="bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+            </div>
+          </div>
+
           {params.length > 0 && (
             <div className="flex flex-col gap-1.5">
               <label className="text-xs text-text-muted font-medium">{t('backtests.parameters')}</label>
@@ -285,13 +329,12 @@ export function Backtests() {
                   <div className="px-4 py-3 border-b border-border flex items-center justify-between">
                     <span className="text-sm font-medium">Price · Trade Entries &amp; Exits</span>
                     <span className="text-xs text-text-muted">
-                      ▲ buy &nbsp; ▼ sell
+                      ▲ buy &nbsp; ▼ sell &nbsp;·&nbsp; scroll or drag to zoom
                     </span>
                   </div>
-                  <TradeChart
+                  <BacktestChart
                     prices={result.prices}
                     trades={result.trades}
-                    timeframe={result.timeframe}
                     height={280}
                   />
                 </div>

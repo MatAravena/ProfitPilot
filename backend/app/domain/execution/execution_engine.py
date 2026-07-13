@@ -51,6 +51,7 @@ class ExecutionOutcome:
     order: Optional[Order] = None
     order_result: Optional[OrderResult] = None
     fill: Optional[Fill] = None
+    realized_pnl: Optional[float] = None   # set for a filled close
     halted: bool = False
 
 
@@ -90,6 +91,8 @@ class ExecutionEngine:
         held_long = held and position.quantity > 0
 
         # 3. CLOSE / NEUTRAL — flatten if in a position, else nothing.
+        # NOTE: NEUTRAL is treated as an explicit "go flat" (synonym for CLOSE), by design —
+        # a strategy that wants to hold should return no signal, not NEUTRAL.
         if intent in (Direction.CLOSE, Direction.NEUTRAL):
             if held:
                 return [await self._close(
@@ -235,5 +238,6 @@ class ExecutionEngine:
                 self._risk.increment_open_positions(strategy_id, -1)
                 self._risk.update_daily_pnl(strategy_id, realized_pnl)
 
+        realized = realized_pnl if (not open_position and fill is not None) else None
         return ExecutionOutcome(action=action, reason=close_reason, order=order,
-                                order_result=result, fill=fill)
+                                order_result=result, fill=fill, realized_pnl=realized)

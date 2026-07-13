@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.deps import LOCAL_USER_ID
 from app.core.config import get_settings
-from app.api.routes import strategies, brokers, forecasting, backtests, signals, portfolio, health, market, builder
+from app.api.routes import strategies, brokers, forecasting, backtests, signals, portfolio, health, market, builder, orders, settings as settings_routes
 from app.api.ws.router import router as ws_router
 
 logger = structlog.get_logger(__name__)
@@ -101,6 +101,8 @@ def create_app() -> FastAPI:
     app.include_router(portfolio.router,    prefix=prefix)
     app.include_router(market.router,       prefix=prefix)
     app.include_router(builder.router,      prefix=prefix, tags=["builder"])
+    app.include_router(orders.router,       prefix=prefix, tags=["orders"])
+    app.include_router(settings_routes.router, prefix=prefix, tags=["settings"])
 
     # WebSocket — added directly on app to avoid router prefix issues
     from app.api.ws.router import websocket_endpoint

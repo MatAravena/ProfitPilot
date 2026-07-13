@@ -37,6 +37,7 @@ class OrderRecord(Base):
     broker_order_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     filled_qty: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     avg_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    realized_pnl: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # set on a close
     signal_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(native_uuid=False), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), index=True

@@ -64,6 +64,40 @@ async def test_run_backtest_sma_crossover(client):
 
 
 @pytest.mark.asyncio
+async def test_run_backtest_forwards_requested_date_range(client):
+    """Regression: the full requested [start, end] range must reach the data
+    provider (not silently truncated to a default lookback)."""
+    from app.db.base import engine, Base
+    import app.models.db  # noqa: F401 — registers ORM models (ohlcv_bars for the cache path)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    # Use the always-loaded user strategy so this test is order-independent
+    # (built-in examples only register once a /strategies endpoint is hit).
+    fetch_mock = AsyncMock(return_value=_fake_bars(200))
+    with patch("app.services.backtest_service.fetch_ohlcv", new=fetch_mock):
+        resp = await client.post("/api/v1/backtests/run", json={
+            # Unique symbol → the OHLCV cache is guaranteed empty, forcing the
+            # cache-miss path that forwards start/end to the provider (hermetic
+            # regardless of bars other tests left in the shared in-memory DB).
+            "strategy_name": "AlwaysLong",
+            "symbol": "RANGETESTUSDT",
+            "timeframe": "1d",
+            "start": "2022-01-01T00:00:00Z",
+            "end": "2022-12-31T00:00:00Z",
+            "initial_capital": 10000,
+            "commission_pct": 0.001,
+            "parameters": {},
+        })
+
+    assert resp.status_code == 200
+    fetch_mock.assert_awaited_once()
+    kwargs = fetch_mock.await_args.kwargs
+    assert (kwargs["start"].year, kwargs["start"].month, kwargs["start"].day) == (2022, 1, 1)
+    assert (kwargs["end"].year, kwargs["end"].month, kwargs["end"].day) == (2022, 12, 31)
+
+
+@pytest.mark.asyncio
 async def test_run_backtest_unknown_strategy_returns_400(client):
     with patch(
         "app.services.backtest_service.fetch_ohlcv",

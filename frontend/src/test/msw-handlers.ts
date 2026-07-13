@@ -56,13 +56,22 @@ export const handlers = [
     })
   ),
 
+  http.get('/api/v1/settings/risk', () => HttpResponse.json({
+    stop_loss_pct: 0.015, take_profit_pct: null, max_open_positions: 5,
+    max_daily_drawdown_pct: 0.03, max_total_drawdown_pct: 0.10,
+    max_orders_per_minute: 10, kill_switch_enabled: true,
+  })),
+  http.put('/api/v1/settings/risk', async ({ request }) => HttpResponse.json(await request.json())),
+
   http.get('/api/v1/brokers', () => HttpResponse.json([])),
   http.get('/api/v1/strategies', () => HttpResponse.json([])),
   http.get('/api/v1/strategies/classes', () => HttpResponse.json([])),
+  http.get('/api/v1/strategies/:id/orders', () => HttpResponse.json([])),
   http.get('/api/v1/signals', () => HttpResponse.json([])),
   http.get('/api/v1/portfolio/summary', () => HttpResponse.json({
     total_equity: 0, total_cash: 0, total_unrealized_pnl: 0, positions: [], accounts: [],
   })),
   http.get('/api/v1/portfolio/history', () => HttpResponse.json([])),
+  http.get('/api/v1/orders', () => HttpResponse.json({ items: [], total: 0 })),
   http.get('/api/v1/market/ohlcv', () => HttpResponse.json([])),
 ]

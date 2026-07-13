@@ -8,6 +8,7 @@ import { api } from '@/lib/api'
 import { cn, formatCurrency, formatPercent } from '@/lib/utils'
 import type { SignalRecord } from '@/types'
 import { PriceChart } from '@/components/charts/PriceChart'
+import { EquityChart } from '@/components/charts/EquityChart'
 
 const TIMEFRAMES = ['1m', '5m', '15m', '1h', '4h', '1d'] as const
 
@@ -69,6 +70,17 @@ export function Dashboard() {
     queryFn: () => api.signals.list(20),
     staleTime: 30_000,
   })
+
+  const { data: equityHistory = [] } = useQuery({
+    queryKey: ['portfolio', 'history'],
+    queryFn: () => api.portfolio.history(),
+    staleTime: 30_000,
+    retry: false,
+  })
+  const equityData = equityHistory.map((p) => ({
+    time: Math.floor(new Date(p.snapped_at).getTime() / 1000),
+    value: p.equity,
+  }))
   useEffect(() => {
     if (recentSignals?.length) setSignals(recentSignals)
   }, [recentSignals, setSignals])
@@ -135,6 +147,20 @@ export function Dashboard() {
             <p className={cn('text-xs mt-1', positive ? 'text-success' : 'text-danger')}>{subValue}</p>
           </div>
         ))}
+      </div>
+
+      {/* Portfolio equity curve */}
+      <div className="bg-surface border border-border rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-border">
+          <span className="text-sm font-medium">{t('dashboard.equityCurve')}</span>
+        </div>
+        {equityData.length === 0 ? (
+          <div className="px-4 py-10 text-center text-text-muted text-sm">{t('dashboard.noEquityHistory')}</div>
+        ) : (
+          <div className="p-2">
+            <EquityChart data={equityData} height={220} />
+          </div>
+        )}
       </div>
 
       {/* Chart + Live signals */}

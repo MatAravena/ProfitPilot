@@ -1,5 +1,4 @@
 import type {
-  Order,
   OrderResult,
   PlaceOrderPayload,
   Position,
@@ -10,7 +9,9 @@ import type {
   StrategyClassDef,
   CreateStrategyPayload,
   ExecutionConfig,
+  RiskProfile,
   SignalRecord,
+  OrderRecord,
   PortfolioSnapshotPoint,
 } from '@/types'
 import type {
@@ -104,15 +105,17 @@ export const api = {
       }),
   },
 
-  // Placeholder — orders endpoint not yet implemented in backend
   orders: {
-    list: (_params: { status?: string; page?: number; page_size?: number } = {}) =>
-      Promise.resolve({ items: [] as Order[], total: 0 }),
+    // User-wide order history (order_records), newest first, paginated.
+    list: (limit = 25, offset = 0) =>
+      request<{ items: OrderRecord[]; total: number }>(`/orders?limit=${limit}&offset=${offset}`),
   },
 
   strategies: {
     classes: () => request<StrategyClassDef[]>('/strategies/classes'),
     list: () => request<StrategyInstance[]>('/strategies'),
+    orders: (id: string, limit = 200) =>
+      request<OrderRecord[]>(`/strategies/${id}/orders?limit=${limit}`),
     create: (body: CreateStrategyPayload) =>
       request<StrategyInstance>('/strategies', { method: 'POST', body: JSON.stringify(body) }),
     updateStatus: (id: string, status: string) =>
@@ -126,6 +129,12 @@ export const api = {
         body: JSON.stringify(body),
       }),
     delete: (id: string) => request<void>(`/strategies/${id}`, { method: 'DELETE' }),
+  },
+
+  settings: {
+    getRisk: () => request<RiskProfile>('/settings/risk'),
+    updateRisk: (body: RiskProfile) =>
+      request<RiskProfile>('/settings/risk', { method: 'PUT', body: JSON.stringify(body) }),
   },
 
   backtests: {

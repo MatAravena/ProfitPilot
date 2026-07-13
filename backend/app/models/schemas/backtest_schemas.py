@@ -15,6 +15,10 @@ class BacktestRequest(BaseModel):
     end: Optional[datetime] = None
     initial_capital: float = Field(10_000.0, gt=0)
     commission_pct: float = Field(0.001, ge=0)
+    # Optional risk exits for the run — arrangeable per backtest (pre-filled from the user's
+    # risk profile on the form). None = no stop / no target.
+    stop_loss_pct: Optional[float] = Field(None, gt=0, le=1)
+    take_profit_pct: Optional[float] = Field(None, gt=0, le=5)
     parameters: Dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("start", "end", mode="after")

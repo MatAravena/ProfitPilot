@@ -75,16 +75,19 @@ class RiskManager:
                 limit_value=0.0,
             )
 
-        # Run all checks in sequence — first failure returns a veto
-        checks = [
-            self._check_position_size(order, account, risk_config),
-            self._check_max_positions(state, risk_config),
-            self._check_daily_drawdown(state, account, risk_config),
-            self._check_total_drawdown(state, account, risk_config),
-            self._check_order_rate(state, risk_config),
-        ]
+        # Run all checks in sequence — first failure returns a veto. Evaluated lazily so a
+        # veto short-circuits before _check_order_rate, whose side effect (incrementing the
+        # per-minute counter) must not fire for orders an earlier check already rejected.
+        checks = (
+            lambda: self._check_position_size(order, account, risk_config),
+            lambda: self._check_max_positions(state, risk_config),
+            lambda: self._check_daily_drawdown(state, account, risk_config),
+            lambda: self._check_total_drawdown(state, account, risk_config),
+            lambda: self._check_order_rate(state, risk_config),
+        )
 
-        for veto in checks:
+        for check in checks:
+            veto = check()
             if veto is not None:
                 self._log.warning(
                     "risk.order_vetoed",
@@ -106,6 +109,56 @@ class RiskManager:
             qty=order.quantity,
         )
         return True
+
+    def seed_state(
+        self,
+        strategy_id: UUID,
+        *,
+        equity: float,
+        open_position_count: int,
+        peak_equity: Optional[float] = None,
+        daily_pnl: float = 0.0,
+        total_pnl: float = 0.0,
+    ) -> None:
+        """Rehydrate a strategy's runtime risk state after a process restart, from
+        persisted broker/ledger truth. Seeds peak equity (baseline for total-drawdown)
+        and the open-position count (so max_open_positions is enforced immediately).
+
+        Pass the persisted historical peak as `peak_equity` so the total-drawdown baseline
+        isn't silently reset to a depressed current equity on restart; defaults to current
+        equity for a first run with no persisted peak."""
+        base_peak = peak_equity if peak_equity is not None else equity
+        state = self._states.get(strategy_id)
+        if state is None:
+            state = RiskState(strategy_id=strategy_id, peak_equity=base_peak)
+            self._states[strategy_id] = state
+        state.peak_equity = max(state.peak_equity, base_peak, equity)
+        state.open_position_count = open_position_count
+        state.daily_pnl = daily_pnl
+        state.total_pnl = total_pnl
+        self._log.info(
+            "risk.state_seeded",
+            strategy_id=str(strategy_id),
+            equity=equity,
+            peak_equity=state.peak_equity,
+            open_positions=open_position_count,
+        )
+
+    def observe_equity(self, strategy_id: UUID, equity: float) -> float:
+        """Update the running high-water mark from an equity reading taken any cycle (not
+        just when an order is placed), so total-drawdown tracks the true peak. Returns the
+        current peak for persistence."""
+        state = self._states.get(strategy_id)
+        if state is None:
+            state = RiskState(strategy_id=strategy_id, peak_equity=equity)
+            self._states[strategy_id] = state
+        elif equity > state.peak_equity:
+            state.peak_equity = equity
+        return state.peak_equity
+
+    def peak_equity(self, strategy_id: UUID) -> Optional[float]:
+        state = self._states.get(strategy_id)
+        return state.peak_equity if state else None
 
     # ── State Updates (call after fills/PnL updates) ───────────────────────────
 
@@ -159,7 +212,10 @@ class RiskManager:
         if estimated_price > 0:
             notional = order.quantity * estimated_price
             max_notional = account.equity * config.max_position_size_pct
-            if notional > max_notional:
+            # Relative tolerance: a sizer that targets exactly the cap can recompute a
+            # notional a few ULPs above it (qty = cap/price, then qty*price), which must
+            # not be vetoed as "oversized".
+            if notional > max_notional * (1 + 1e-9):
                 return RiskVeto(
                     order_id=order.order_id,
                     reason=f"Order notional ${notional:.2f} exceeds max position size ${max_notional:.2f}",

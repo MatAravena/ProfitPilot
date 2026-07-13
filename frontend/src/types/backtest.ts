@@ -8,6 +8,8 @@ export interface BacktestRequest {
   end?: string
   initial_capital: number
   commission_pct: number
+  stop_loss_pct?: number | null
+  take_profit_pct?: number | null
   parameters: Record<string, unknown>
 }
 

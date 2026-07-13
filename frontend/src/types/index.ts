@@ -119,19 +119,30 @@ export interface ConnectBrokerPayload {
 // Strategy instance (mirrors StrategyInstanceResponse from backend)
 export type StrategyStatus = 'draft' | 'paper' | 'live' | 'paused' | 'archived' | 'halted'
 
-// Per-strategy execution / risk envelope (mirrors backend ExecutionConfig).
-// All _pct fields are fractions (0.02 = 2%).
-export interface ExecutionConfig {
-  size_pct: number
+// Per-user risk defaults (mirrors backend RiskProfileSchema). All _pct fields are fractions.
+export interface RiskProfile {
   stop_loss_pct: number
   take_profit_pct: number | null
   max_open_positions: number
   max_daily_drawdown_pct: number
   max_total_drawdown_pct: number
   max_orders_per_minute: number
-  allow_short: boolean
   kill_switch_enabled: boolean
+}
+
+// Per-strategy config (mirrors backend ExecutionConfig). Behavioral fields are always set;
+// risk fields are optional overrides — null ⇒ inherit the user's RiskProfile.
+export interface ExecutionConfig {
+  size_pct: number
+  allow_short: boolean
   poll_seconds: number | null
+  stop_loss_pct: number | null
+  take_profit_pct: number | null
+  max_open_positions: number | null
+  max_daily_drawdown_pct: number | null
+  max_total_drawdown_pct: number | null
+  max_orders_per_minute: number | null
+  kill_switch_enabled: boolean | null
 }
 
 export interface StrategyInstance {
@@ -173,6 +184,21 @@ export interface SignalRecord {
   source: string
   generated_at: string
   close_price: number | null
+}
+
+// One row from order_records — an order attempt by the executor.
+export interface OrderRecord {
+  id: string
+  symbol: string
+  side: 'buy' | 'sell' | null
+  quantity: number | null
+  status: string
+  reason: string | null
+  avg_price: number | null
+  filled_qty: number | null
+  realized_pnl: number | null
+  signal_id: string | null
+  created_at: string
 }
 
 // Portfolio equity snapshot

@@ -6,6 +6,7 @@ import { Trade } from '@/pages/Trade/Trade'
 import { Portfolio } from '@/pages/Portafolio/Portfolio'
 import { Backtests } from '@/pages/Backtests/Backtests'
 import { Strategies } from '@/pages/Strategies/Strategies'
+import { StrategyDetail } from '@/pages/Strategies/StrategyDetail'
 import { Builder } from '@/pages/Builder/Builder'
 import { Settings } from '@/pages/Settings/Settings'
 
@@ -20,6 +21,7 @@ export default function App() {
           <Route path="/portfolio" element={<Portfolio />} />
           <Route path="/backtests" element={<Backtests />} />
           <Route path="/strategies" element={<Strategies />} />
+          <Route path="/strategies/:id" element={<StrategyDetail />} />
           <Route path="/builder" element={<Builder />} />
           <Route path="/settings" element={<Settings />} />
         </Route>

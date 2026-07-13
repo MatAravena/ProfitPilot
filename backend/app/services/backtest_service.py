@@ -86,6 +86,8 @@ class BacktestService:
             bars=bars,
             initial_capital=req.initial_capital,
             commission_pct=req.commission_pct,
+            stop_loss_pct=req.stop_loss_pct,
+            take_profit_pct=req.take_profit_pct,
         )
         return await engine.run()
 

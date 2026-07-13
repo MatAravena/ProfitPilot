@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { TrendingUp, TrendingDown, DollarSign, Activity, ArrowUpRight, ArrowDownLeft, CheckCircle, AlertCircle } from 'lucide-react'
+import { TrendingUp, TrendingDown, DollarSign, Activity, ArrowUpRight, ArrowDownLeft, CheckCircle, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react'
 import { usePortfolioStore } from '@/stores/portfolio'
 import { api } from '@/lib/api'
 import { cn, formatCurrency, formatPercent } from '@/lib/utils'
 import type { PlaceOrderPayload } from '@/types'
 import { EquityChart } from '@/components/charts/EquityChart'
+
+const ORDERS_PAGE_SIZE = 25
 
 const EMPTY_FORM: PlaceOrderPayload = {
   symbol: '',
@@ -36,6 +38,18 @@ export function Portfolio() {
     queryFn: api.brokers.list,
     staleTime: 30_000,
   })
+
+  const [ordersPage, setOrdersPage] = useState(0)
+  const { data: orderHistory } = useQuery({
+    queryKey: ['orders', ordersPage],
+    queryFn: () => api.orders.list(ORDERS_PAGE_SIZE, ordersPage * ORDERS_PAGE_SIZE),
+    refetchInterval: 30_000,
+  })
+  const orders = orderHistory?.items ?? []
+  const ordersTotal = orderHistory?.total ?? 0
+  const ordersFrom = ordersPage * ORDERS_PAGE_SIZE + 1
+  const ordersTo = Math.min(ordersFrom + ORDERS_PAGE_SIZE - 1, ordersTotal)
+  const hasMoreOrders = ordersTo < ordersTotal
 
   const [selectedBroker, setSelectedBroker] = useState('')
   useEffect(() => {
@@ -276,6 +290,72 @@ export function Portfolio() {
             </form>
           )}
         </div>
+      </div>
+
+      {/* Order history */}
+      <div className="bg-surface border border-border rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-3">
+          <span className="text-sm font-medium">{t('portfolio.orders.title')}</span>
+          {ordersTotal > 0 && (
+            <div className="flex items-center gap-2 text-xs text-text-muted">
+              <span className="tabular-nums">
+                {t('portfolio.orders.showing', { from: ordersFrom, to: ordersTo, total: ordersTotal })}
+              </span>
+              <button
+                type="button"
+                onClick={() => setOrdersPage((p) => Math.max(0, p - 1))}
+                disabled={ordersPage === 0}
+                className="p-1 rounded border border-border hover:bg-surface-2 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+                aria-label={t('portfolio.orders.prev')}
+              >
+                <ChevronLeft size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setOrdersPage((p) => p + 1)}
+                disabled={!hasMoreOrders}
+                className="p-1 rounded border border-border hover:bg-surface-2 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+                aria-label={t('portfolio.orders.next')}
+              >
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          )}
+        </div>
+        {orders.length === 0 ? (
+          <div className="px-4 py-10 text-center text-text-muted text-sm">{t('portfolio.orders.empty')}</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-border text-text-muted">
+                  <th className="px-4 py-2.5 text-left font-medium">{t('portfolio.orders.time')}</th>
+                  <th className="px-4 py-2.5 text-left font-medium">{t('portfolio.orders.symbol')}</th>
+                  <th className="px-4 py-2.5 text-left font-medium">{t('portfolio.orders.side')}</th>
+                  <th className="px-4 py-2.5 text-right font-medium">{t('portfolio.orders.qty')}</th>
+                  <th className="px-4 py-2.5 text-right font-medium">{t('portfolio.orders.price')}</th>
+                  <th className="px-4 py-2.5 text-right font-medium">{t('portfolio.orders.pnl')}</th>
+                  <th className="px-4 py-2.5 text-left font-medium">{t('portfolio.orders.status')}</th>
+                </tr>
+              </thead>
+              <tbody className="font-mono">
+                {orders.map((o) => (
+                  <tr key={o.id} className="border-b border-border/40 hover:bg-surface-2 transition-colors">
+                    <td className="px-4 py-2.5 text-text-muted">{new Date(o.created_at).toLocaleString()}</td>
+                    <td className="px-4 py-2.5">{o.symbol}</td>
+                    <td className={cn('px-4 py-2.5', o.side === 'buy' ? 'text-success' : o.side === 'sell' ? 'text-danger' : 'text-text-muted')}>{o.side ?? '—'}</td>
+                    <td className="px-4 py-2.5 text-right">{o.filled_qty ?? o.quantity ?? '—'}</td>
+                    <td className="px-4 py-2.5 text-right">{o.avg_price != null ? formatCurrency(o.avg_price) : '—'}</td>
+                    <td className={cn('px-4 py-2.5 text-right', (o.realized_pnl ?? 0) > 0 ? 'text-success' : (o.realized_pnl ?? 0) < 0 ? 'text-danger' : '')}>
+                      {o.realized_pnl != null ? formatCurrency(o.realized_pnl) : '—'}
+                    </td>
+                    <td className="px-4 py-2.5 text-text-muted">{o.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   )

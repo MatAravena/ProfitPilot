@@ -50,12 +50,16 @@ class BacktestEngine:
         initial_capital: float = 10_000.0,
         commission_pct: float = 0.001,   # 0.1% per trade side
         warmup_bars: int = 50,
+        stop_loss_pct: Optional[float] = None,
+        take_profit_pct: Optional[float] = None,
     ):
         self._strategy = strategy
         self._bars = bars
         self._initial_capital = initial_capital
         self._commission_pct = commission_pct
         self._warmup_bars = warmup_bars
+        self._stop_loss_pct = stop_loss_pct
+        self._take_profit_pct = take_profit_pct
 
     async def run(self) -> BacktestResult:
         bars = self._bars
@@ -75,6 +79,16 @@ class BacktestEngine:
         for i in range(self._warmup_bars, len(bars)):
             current = bars[i]
             ts_ms = int(current.timestamp.timestamp() * 1000)
+
+            # Intrabar stop-loss / take-profit: check the current bar's range against an open
+            # position before acting on new signals. Fills at the trigger price.
+            if position is not None:
+                exit_price = self._exit_trigger(position, current)
+                if exit_price is not None:
+                    trade = self._close_position(position, exit_price, ts_ms)
+                    capital += position.size * exit_price * (1 - self._commission_pct)
+                    trades.append(trade)
+                    position = None
 
             # Build MarketData up to (and including) current bar
             market_data = MarketData(
@@ -164,6 +178,22 @@ class BacktestEngine:
             trades=trades,
             prices=prices,
         )
+
+    def _exit_trigger(self, pos: _Position, bar: OHLCV) -> Optional[float]:
+        """Return the SL/TP exit price if the bar's range hit a level, else None.
+        Stop is checked before target (conservative when both hit in one bar)."""
+        sl, tp = self._stop_loss_pct, self._take_profit_pct
+        if pos.side == "long":
+            if sl is not None and bar.low <= pos.entry_price * (1 - sl):
+                return pos.entry_price * (1 - sl)
+            if tp is not None and bar.high >= pos.entry_price * (1 + tp):
+                return pos.entry_price * (1 + tp)
+        else:  # short
+            if sl is not None and bar.high >= pos.entry_price * (1 + sl):
+                return pos.entry_price * (1 + sl)
+            if tp is not None and bar.low <= pos.entry_price * (1 - tp):
+                return pos.entry_price * (1 - tp)
+        return None
 
     def _close_position(self, pos: _Position, price: float, ts_ms: int) -> TradeRecord:
         entry_commission = pos.entry_price * self._commission_pct

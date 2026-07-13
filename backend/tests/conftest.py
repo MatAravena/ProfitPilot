@@ -6,6 +6,15 @@ Integration tests use an in-memory SQLite DB via the FastAPI TestClient.
 """
 from __future__ import annotations
 
+import os
+
+# Force an isolated in-memory DB BEFORE any app module imports (and thus caches
+# get_settings()). Otherwise `.env`'s file-backed DATABASE_URL wins and the whole
+# suite runs against — and mutates — the real dev DB (profitpilot.db). Must run
+# at conftest import time, before the `from app.core...` imports below.
+os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///:memory:"
+os.environ.setdefault("SECRET_KEY", "test-secret-key")
+
 import pytest
 from datetime import datetime, timezone
 from typing import List

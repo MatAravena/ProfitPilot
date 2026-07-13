@@ -11,25 +11,32 @@ _s = get_settings()
 
 
 class ExecutionConfig(BaseModel):
-    """Per-strategy execution + risk envelope. Every field is adjustable per
-    instance; defaults come from the global settings."""
+    """Per-strategy config. Behavioral fields (size, short, poll) are always set on the
+    strategy. Risk fields are OPTIONAL overrides — None means inherit the user's RiskProfile.
+    A 0% stop/target would trigger at entry, so risk %s are gt=0; 'no take-profit' is null."""
 
+    # Behavioral — always per-strategy.
     size_pct: float = Field(default=_s.DEFAULT_MAX_POSITION_SIZE_PCT, gt=0, le=1,
                             description="Position size as a fraction of account equity")
-    stop_loss_pct: float = Field(default=_s.DEFAULT_STOP_LOSS_PCT, ge=0, le=1)
-    take_profit_pct: Optional[float] = Field(default=None, ge=0, le=5)
-    max_open_positions: int = Field(default=_s.DEFAULT_MAX_OPEN_POSITIONS, ge=1)
-    max_daily_drawdown_pct: float = Field(default=_s.DEFAULT_MAX_DAILY_DRAWDOWN_PCT, ge=0, le=1)
-    max_total_drawdown_pct: float = Field(default=_s.DEFAULT_MAX_TOTAL_DRAWDOWN_PCT, ge=0, le=1)
-    max_orders_per_minute: int = Field(default=_s.DEFAULT_MAX_ORDERS_PER_MINUTE, ge=1)
     allow_short: bool = True
-    kill_switch_enabled: bool = True
     poll_seconds: Optional[int] = Field(default=None, ge=5,
                                         description="Override poll cadence; None derives it from the timeframe")
 
+    # Risk overrides — None = inherit the user's risk profile.
+    stop_loss_pct: Optional[float] = Field(default=None, gt=0, le=1)
+    take_profit_pct: Optional[float] = Field(default=None, gt=0, le=5)
+    max_open_positions: Optional[int] = Field(default=None, ge=1)
+    max_daily_drawdown_pct: Optional[float] = Field(default=None, ge=0, le=1)
+    max_total_drawdown_pct: Optional[float] = Field(default=None, ge=0, le=1)
+    max_orders_per_minute: Optional[int] = Field(default=None, ge=1)
+    kill_switch_enabled: Optional[bool] = None
+
     @classmethod
     def from_instance(cls, inst) -> "ExecutionConfig":
-        return cls(
+        # model_construct: reading persisted state must not re-run input validators. A row
+        # written under looser bounds (or a bound we later tighten) would otherwise raise on
+        # read and 500 the whole list endpoint. Column values are already trusted.
+        return cls.model_construct(
             size_pct=inst.size_pct,
             stop_loss_pct=inst.stop_loss_pct,
             take_profit_pct=inst.take_profit_pct,

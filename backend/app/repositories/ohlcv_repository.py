@@ -16,6 +16,14 @@ if _IS_SQLITE:
 else:
     from sqlalchemy.dialects.postgresql import insert as _insert
 
+# A single multi-row INSERT binds (rows × columns) parameters. SQLite caps this
+# at SQLITE_MAX_VARIABLE_NUMBER (999 before 3.32, 32766 after), so a multi-year
+# intraday fetch of several thousand bars overflows it with "too many SQL
+# variables". Insert in chunks that stay well under even the pre-3.32 limit.
+_COLUMNS_PER_ROW = 8
+_MAX_BIND_PARAMS = 900
+_CHUNK_ROWS = _MAX_BIND_PARAMS // _COLUMNS_PER_ROW  # 112 rows per statement
+
 
 class OhlcvRepository:
     def __init__(self, session: AsyncSession):
@@ -57,6 +65,8 @@ class OhlcvRepository:
             }
             for bar in bars
         ]
-        stmt = _insert(OhlcvBar).values(values).on_conflict_do_nothing()
-        await self._session.execute(stmt)
+        for i in range(0, len(values), _CHUNK_ROWS):
+            chunk = values[i : i + _CHUNK_ROWS]
+            stmt = _insert(OhlcvBar).values(chunk).on_conflict_do_nothing()
+            await self._session.execute(stmt)
         await self._session.flush()

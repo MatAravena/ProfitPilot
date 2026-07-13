@@ -1,13 +1,30 @@
 """
-Strategy sandbox — safely execute user-supplied Python strategy code.
+Strategy sandbox — run user-supplied Python strategy code in an isolated subprocess.
 
 The code runs inside an asyncio subprocess (a fresh Python interpreter) with:
-  - A hard 30-second wall-clock timeout
-  - No network access enforced at the OS level is NOT done here (Phase 1 is
-    local-only anyway), but imports are restricted to a safe whitelist so the
-    code cannot import os, subprocess, socket, requests, etc.
-  - The subprocess communicates only via stdin/stdout (JSON), never touches
-    the filesystem.
+  - A hard 30-second wall-clock timeout (kills runaway / infinite-loop code)
+  - Restricted builtins + ``__import__`` disabled, so the obvious ways to reach
+    os / subprocess / socket / open() are removed
+  - Communication only via stdin/stdout (JSON) — the harness never opens files
+
+THREAT MODEL — READ BEFORE EXPOSING THIS TO UNTRUSTED USERS
+-----------------------------------------------------------
+This is **not** a hardened security boundary. Restricting ``__builtins__`` is a
+guardrail against *accidental* unsafe operations, not a defense against
+*deliberately malicious* code: CPython sandboxes built this way are escapable
+(e.g. ``().__class__.__bases__[0].__subclasses__()`` can reach arbitrary
+classes without any import). There is also no OS-level network isolation and no
+memory cap — a hostile or buggy strategy can still exhaust RAM.
+
+Why that's acceptable in **Phase 1**: the app is local and single-user, so the
+person writing the strategy already owns the machine — an escape grants nothing
+they don't already have. The subprocess + timeout still buy us crash isolation
+and runaway-loop protection.
+
+Before **Phase 2** (multi-tenant / internet-exposed), this MUST be replaced with
+real OS-level isolation: a container / gVisor / Firecracker with no network
+egress, cgroup CPU+memory limits, seccomp, and a read-only filesystem. Tracked
+in TODO.md → Security (Phase 2).
 
 API
 ---
@@ -42,7 +59,8 @@ _HARNESS_TEMPLATE = textwrap.dedent("""
 import json, sys, math, statistics
 
 # ── Allowed stdlib subset ──────────────────────────────────────────────────
-# Everything else is blocked by overwriting __builtins__
+# Guardrail (NOT a security boundary — see the module docstring's threat model):
+# narrow __builtins__ to a safe subset so accidental unsafe calls fail loudly.
 _SAFE_BUILTINS = {{
     k: v for k, v in vars(__builtins__ if isinstance(__builtins__, dict) else __builtins__).items()
     if k in (

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import {
   createChart, ColorType, CrosshairMode, LineStyle,
-  type IChartApi, type ISeriesApi, type UTCTimestamp, type Time,
+  type IChartApi, type ISeriesApi, type UTCTimestamp, type Time, type SeriesMarker,
 } from 'lightweight-charts'
 import type { OHLCVCandle } from '@/types'
 import {
@@ -29,6 +29,8 @@ interface Props {
   /** Fired on crosshair hover; null when the pointer leaves the chart. */
   onHover?: (snap: CrosshairSnapshot | null) => void
   height?: number
+  /** Trade / signal markers to draw on the candle series. */
+  markers?: SeriesMarker<Time>[]
 }
 
 const PANE_HEIGHT = 120
@@ -155,7 +157,7 @@ function computeSeries(candles: OHLCVCandle[], settings: IndicatorSettings): Com
   return result
 }
 
-export function TradingChart({ candles, settings, onHover, height = 420 }: Props) {
+export function TradingChart({ candles, settings, onHover, height = 420, markers }: Props) {
   const priceRef = useRef<HTMLDivElement>(null)
   const paneHostRef = useRef<HTMLDivElement>(null)
   const chartsRef = useRef<IChartApi[]>([])
@@ -296,6 +298,7 @@ export function TradingChart({ candles, settings, onHover, height = 420 }: Props
     candle?.setData(candles.map((c) => ({
       time: t(c.time), open: c.open, high: c.high, low: c.low, close: c.close,
     })) as never)
+    candle?.setMarkers(markers ?? [])
 
     for (const o of computed.overlays) {
       series.get(o.key)?.setData(o.data.map((p) => ({ time: t(p.time), value: p.value })) as never)
@@ -308,7 +311,7 @@ export function TradingChart({ candles, settings, onHover, height = 420 }: Props
         series.get(sd.key)?.setData(sd.data.map((p) => ({ time: t(p.time), value: p.value })) as never)
       }
     }
-  }, [computed, candles])
+  }, [computed, candles, markers])
 
   return (
     <div className="w-full" style={{ height }}>

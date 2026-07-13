@@ -57,6 +57,8 @@
     "noSignalsHint": "Start a strategy in Paper or Live mode.",
     "openPositions": "Open Positions",
     "noPositions": "No open positions",
+    "equityCurve": "Equity Curve",
+    "noEquityHistory": "No equity history yet — it builds up as snapshots are recorded.",
     "customPlaceholder": "Custom…",
     "conf": "{{pct}}% conf",
     "kpis": {
@@ -118,7 +120,15 @@
       "size": "Size",
       "pnl": "P&L",
       "pnlPct": "P&L %"
-    }
+    },
+    "pagination": {
+      "showing": "{{from}}–{{to}} of {{total}}",
+      "prev": "Prev",
+      "next": "Next"
+    },
+    "stopLoss": "Stop loss %",
+    "takeProfit": "Take profit %",
+    "none": "None"
   },
   "portfolio": {
     "kpis": {
@@ -154,6 +164,20 @@
       "market": "market",
       "limit": "limit",
       "placing": "Placing…"
+    },
+    "orders": {
+      "title": "Order History",
+      "empty": "No orders yet — they appear as your strategies trade.",
+      "showing": "{{from}}–{{to}} of {{total}}",
+      "prev": "Prev",
+      "next": "Next",
+      "time": "Time",
+      "symbol": "Symbol",
+      "side": "Side",
+      "qty": "Qty",
+      "price": "Price",
+      "pnl": "P&L",
+      "status": "Status"
     }
   },
   "strategies": {
@@ -165,6 +189,20 @@
     "inactive": "Inactive ({{count}})",
     "empty": "No strategies yet",
     "emptyHint": "Create a strategy, attach a broker connection, and start paper trading.",
+    "detail": {
+      "view": "View chart",
+      "back": "Back to strategies",
+      "notFound": "Strategy not found",
+      "orderHistory": "Order history",
+      "showSignals": "Show signals",
+      "noOrders": "No orders yet",
+      "colTime": "Time",
+      "colSide": "Side",
+      "colQty": "Qty",
+      "colPrice": "Price",
+      "colPnl": "P&L",
+      "colStatus": "Status"
+    },
     "card": {
       "deleteConfirm": "Delete?",
       "yes": "Yes",
@@ -213,7 +251,10 @@
       "sizeShort": "Size",
       "slShort": "SL",
       "tpShort": "TP",
-      "shortShort": "Short"
+      "shortShort": "Short",
+      "inherit": "Inherit",
+      "inheritShort": "Profile",
+      "overridesHint": "Risk overrides — leave blank to inherit your risk defaults (Settings)."
     }
   },
   "builder": {
@@ -288,6 +329,20 @@
     "badge": {
       "paper": "Paper",
       "live": "Live"
+    },
+    "risk": {
+      "title": "Risk defaults",
+      "hint": "Defaults for new strategies and backtests. Changing these does not affect running bots.",
+      "stopLoss": "Stop loss",
+      "takeProfit": "Take profit",
+      "dailyDrawdown": "Daily drawdown",
+      "totalDrawdown": "Total drawdown",
+      "maxPositions": "Max positions",
+      "maxOrdersMin": "Orders / min",
+      "none": "None",
+      "saved": "Risk defaults saved",
+      "save": "Save",
+      "saving": "Saving..."
     }
   }
 }

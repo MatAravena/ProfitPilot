@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { Trash2, Plus, AlertTriangle, CheckCircle, FlaskConical, Zap, Eye, EyeOff } from 'lucide-react'
 import { api } from '@/lib/api'
-import type { BrokerName, ConnectBrokerPayload } from '@/types'
+import type { BrokerName, ConnectBrokerPayload, RiskProfile } from '@/types'
+import { useToastStore } from '@/stores/toast'
 import { cn } from '@/lib/utils'
 
 const BROKERS: { id: BrokerName; label: string; markets: string }[] = [
@@ -63,6 +64,8 @@ export function Settings() {
   return (
     <div className="p-6 flex flex-col gap-6 animate-fade-in max-w-2xl">
       <h1 className="text-lg font-semibold">{t('settings.title')}</h1>
+
+      <RiskDefaults />
 
       {/* Connected brokers */}
       <section>
@@ -263,6 +266,93 @@ export function Settings() {
         </section>
       )}
     </div>
+  )
+}
+
+const RISK_PCT_FIELDS: { key: keyof RiskProfile; labelKey: string }[] = [
+  { key: 'stop_loss_pct', labelKey: 'settings.risk.stopLoss' },
+  { key: 'take_profit_pct', labelKey: 'settings.risk.takeProfit' },
+  { key: 'max_daily_drawdown_pct', labelKey: 'settings.risk.dailyDrawdown' },
+  { key: 'max_total_drawdown_pct', labelKey: 'settings.risk.totalDrawdown' },
+]
+const RISK_INT_FIELDS: { key: keyof RiskProfile; labelKey: string }[] = [
+  { key: 'max_open_positions', labelKey: 'settings.risk.maxPositions' },
+  { key: 'max_orders_per_minute', labelKey: 'settings.risk.maxOrdersMin' },
+]
+
+function RiskDefaults() {
+  const { t } = useTranslation()
+  const qc = useQueryClient()
+  const toastError = useToastStore((s) => s.error)
+  const toastSuccess = useToastStore((s) => s.success)
+  const [draft, setDraft] = useState<RiskProfile | null>(null)
+
+  const { data } = useQuery({ queryKey: ['risk-profile'], queryFn: api.settings.getRisk })
+  const profile = draft ?? data ?? null
+
+  const save = useMutation({
+    mutationFn: (body: RiskProfile) => api.settings.updateRisk(body),
+    onSuccess: (saved) => {
+      qc.setQueryData(['risk-profile'], saved)
+      setDraft(null)
+      toastSuccess(t('settings.risk.saved'))
+    },
+    onError: (err) => toastError(err),
+  })
+
+  if (!profile) return null
+  const set = (patch: Partial<RiskProfile>) => setDraft({ ...profile, ...patch })
+  const pctVal = (f: number | null) => (f === null ? '' : String(Math.round(f * 1e6) / 1e4))
+
+  return (
+    <section>
+      <h2 className="text-sm font-medium text-text-muted uppercase tracking-wide mb-3">{t('settings.risk.title')}</h2>
+      <div className="bg-surface border border-border rounded-xl p-4 flex flex-col gap-4">
+        <p className="text-[11px] text-text-muted">{t('settings.risk.hint')}</p>
+        <div className="grid grid-cols-2 gap-3">
+          {RISK_PCT_FIELDS.map(({ key, labelKey }) => (
+            <label key={key} className="flex flex-col gap-1">
+              <span className="text-[11px] text-text-muted">{t(labelKey)}</span>
+              <div className="relative">
+                <input type="text" inputMode="decimal"
+                  value={pctVal(profile[key] as number | null)}
+                  placeholder={key === 'take_profit_pct' ? t('settings.risk.none') : ''}
+                  onChange={(e) => {
+                    const raw = e.target.value
+                    const optional = key === 'take_profit_pct'
+                    if (raw === '') return set({ [key]: optional ? null : profile[key] } as Partial<RiskProfile>)
+                    const n = Number(raw)
+                    if (!Number.isNaN(n)) set({ [key]: n / 100 } as Partial<RiskProfile>)
+                  }}
+                  className="w-full bg-background border border-border rounded-lg px-3 py-2 pr-6 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-primary" />
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-text-muted">%</span>
+              </div>
+            </label>
+          ))}
+          {RISK_INT_FIELDS.map(({ key, labelKey }) => (
+            <label key={key} className="flex flex-col gap-1">
+              <span className="text-[11px] text-text-muted">{t(labelKey)}</span>
+              <input type="text" inputMode="numeric"
+                value={String(profile[key] ?? '')}
+                onChange={(e) => {
+                  const raw = e.target.value
+                  if (raw === '') return
+                  const n = Number(raw)
+                  if (!Number.isNaN(n)) set({ [key]: Math.trunc(n) } as Partial<RiskProfile>)
+                }}
+                className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-primary" />
+            </label>
+          ))}
+        </div>
+        <button
+          onClick={() => save.mutate(profile)}
+          disabled={save.isPending || draft === null}
+          className="self-start bg-primary text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 cursor-pointer"
+        >
+          {save.isPending ? t('settings.risk.saving') : t('settings.risk.save')}
+        </button>
+      </div>
+    </section>
   )
 }
 

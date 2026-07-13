@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
 import {
   TrendingUp, Play, Pause, Trash2, Plus, X,
-  ChevronDown, AlertTriangle, FlaskConical, Radio, SlidersHorizontal,
+  ChevronDown, AlertTriangle, FlaskConical, SlidersHorizontal,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useToastStore } from '@/stores/toast'
+import { StatusBadge } from '@/components/strategy/StatusBadge'
 import {
   ExecutionConfigForm, DEFAULT_EXECUTION_CONFIG,
 } from '@/components/strategy/ExecutionConfigForm'
@@ -15,33 +17,6 @@ import type {
 } from '@/types'
 
 const pct = (f: number) => `${Math.round(f * 1e6) / 1e4}%`
-
-const STATUS_CONFIG: Record<string, { label: string; className: string; icon?: React.ReactNode }> = {
-  draft:    { label: 'Draft',
-              className: 'bg-surface-2 text-text-muted' },
-  paper:    { label: 'Paper',
-              className: 'bg-yellow-500/20 text-yellow-400',
-              icon: <FlaskConical size={11} /> },
-  live:     { label: 'Live',
-              className: 'bg-success/20 text-success',
-              icon: <Radio size={11} className="animate-pulse" /> },
-  paused:   { label: 'Paused',
-              className: 'bg-warning/20 text-warning' },
-  archived: { label: 'Archived',
-              className: 'bg-surface-2 text-text-muted' },
-  halted:   { label: 'Halted',
-              className: 'bg-danger/20 text-danger',
-              icon: <AlertTriangle size={11} /> },
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const cfg = STATUS_CONFIG[status] ?? { label: status, className: 'bg-surface-2 text-text-muted' }
-  return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium ${cfg.className}`}>
-      {cfg.icon}{cfg.label}
-    </span>
-  )
-}
 
 interface CreateDialogProps {
   classes: StrategyClassDef[]
@@ -250,6 +225,10 @@ function StrategyCard({ strategy, brokers, onStatusChange, onDelete, onEditConfi
           </div>
         ) : (
           <div className="flex items-center gap-2 shrink-0">
+            <Link to={`/strategies/${strategy.id}`} title={t('strategies.detail.view')}
+              className="text-text-muted hover:text-primary transition-colors">
+              <TrendingUp size={14} />
+            </Link>
             <button onClick={() => onEditConfig(strategy)} title={t('strategies.config.edit')}
               className="text-text-muted hover:text-primary transition-colors">
               <SlidersHorizontal size={14} />
@@ -290,7 +269,10 @@ function StrategyCard({ strategy, brokers, onStatusChange, onDelete, onEditConfi
             {t('strategies.config.sizeShort')} <span className="font-mono text-text">{pct(strategy.execution.size_pct)}</span>
           </span>
           <span className="bg-surface-2 border border-border px-1.5 py-0.5 rounded">
-            {t('strategies.config.slShort')} <span className="font-mono text-danger">{pct(strategy.execution.stop_loss_pct)}</span>
+            {t('strategies.config.slShort')}{' '}
+            <span className="font-mono text-danger">
+              {strategy.execution.stop_loss_pct != null ? pct(strategy.execution.stop_loss_pct) : t('strategies.config.inheritShort')}
+            </span>
           </span>
           {strategy.execution.take_profit_pct != null && (
             <span className="bg-surface-2 border border-border px-1.5 py-0.5 rounded">

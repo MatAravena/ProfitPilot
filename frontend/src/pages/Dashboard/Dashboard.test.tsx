@@ -38,4 +38,10 @@ describe('Dashboard page', () => {
     renderDashboard()
     expect(screen.getByText('Portfolio Equity')).toBeInTheDocument()
   })
+
+  it('renders the Equity Curve card with its empty state when there is no history', async () => {
+    renderDashboard()
+    expect(screen.getByText('Equity Curve')).toBeInTheDocument()
+    expect(await screen.findByText(/No equity history yet/i)).toBeInTheDocument()
+  })
 })

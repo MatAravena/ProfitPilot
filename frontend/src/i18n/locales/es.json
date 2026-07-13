@@ -57,6 +57,8 @@
     "noSignalsHint": "Inicia una estrategia en modo Paper o Live.",
     "openPositions": "Posiciones abiertas",
     "noPositions": "Sin posiciones abiertas",
+    "equityCurve": "Curva de patrimonio",
+    "noEquityHistory": "Aún no hay historial de patrimonio — se genera a medida que se registran instantáneas.",
     "customPlaceholder": "Personalizar…",
     "conf": "{{pct}}% conf",
     "kpis": {
@@ -118,7 +120,10 @@
       "size": "Tamaño",
       "pnl": "P&L",
       "pnlPct": "P&L %"
-    }
+    },
+    "stopLoss": "Stop loss %",
+    "takeProfit": "Take profit %",
+    "none": "Ninguno"
   },
   "portfolio": {
     "kpis": {
@@ -154,6 +159,20 @@
       "market": "mercado",
       "limit": "límite",
       "placing": "Enviando…"
+    },
+    "orders": {
+      "title": "Historial de órdenes",
+      "empty": "Aún no hay órdenes — aparecen a medida que tus estrategias operan.",
+      "showing": "{{from}}–{{to}} de {{total}}",
+      "prev": "Ant.",
+      "next": "Sig.",
+      "time": "Hora",
+      "symbol": "Símbolo",
+      "side": "Lado",
+      "qty": "Cant.",
+      "price": "Precio",
+      "pnl": "P&L",
+      "status": "Estado"
     }
   },
   "strategies": {
@@ -165,6 +184,20 @@
     "inactive": "Inactivas ({{count}})",
     "empty": "Sin estrategias aún",
     "emptyHint": "Crea una estrategia, conecta un broker y empieza a operar en modo paper.",
+    "detail": {
+      "view": "Ver gráfico",
+      "back": "Volver a estrategias",
+      "notFound": "Estrategia no encontrada",
+      "orderHistory": "Historial de órdenes",
+      "showSignals": "Mostrar señales",
+      "noOrders": "Aún no hay órdenes",
+      "colTime": "Hora",
+      "colSide": "Lado",
+      "colQty": "Cant.",
+      "colPrice": "Precio",
+      "colPnl": "P&L",
+      "colStatus": "Estado"
+    },
     "card": {
       "deleteConfirm": "¿Eliminar?",
       "yes": "Sí",
@@ -213,7 +246,10 @@
       "sizeShort": "Tam.",
       "slShort": "SL",
       "tpShort": "TP",
-      "shortShort": "Corto"
+      "shortShort": "Corto",
+      "inherit": "Heredar",
+      "inheritShort": "Perfil",
+      "overridesHint": "Overrides de riesgo — dejar vacío para heredar tus valores por defecto (Ajustes)."
     }
   },
   "builder": {
@@ -256,6 +292,11 @@
       "size": "Tamaño",
       "pnl": "P&L",
       "pnlPct": "P&L %"
+    },
+    "pagination": {
+      "showing": "{{from}}–{{to}} de {{total}}",
+      "prev": "Ant.",
+      "next": "Sig."
     }
   },
   "settings": {
@@ -288,6 +329,20 @@
     "badge": {
       "paper": "Paper",
       "live": "Live"
+    },
+    "risk": {
+      "title": "Riesgo por defecto",
+      "hint": "Valores por defecto para nuevas estrategias y backtests. Cambiarlos no afecta a los bots en ejecución.",
+      "stopLoss": "Stop loss",
+      "takeProfit": "Take profit",
+      "dailyDrawdown": "Drawdown diario",
+      "totalDrawdown": "Drawdown total",
+      "maxPositions": "Posiciones máx.",
+      "maxOrdersMin": "Órdenes / min",
+      "none": "Ninguno",
+      "saved": "Riesgo guardado",
+      "save": "Guardar",
+      "saving": "Guardando..."
     }
   }
 }

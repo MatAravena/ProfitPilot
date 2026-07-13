@@ -12,9 +12,9 @@ from app.core.enums import BrokerID, MarketType, Timeframe
 from app.core.types import MarketData, RiskConfig
 from app.domain.broker.base import BrokerAdapter
 from app.domain.execution.execution_engine import (
+    ACTION_CLOSED,
     ACTION_ERROR,
     ACTION_NOOP,
-    ACTION_REJECTED,
     ExecutionEngine,
     ExecutionOutcome,
 )
@@ -71,28 +71,95 @@ class StrategyExecutor:
                 select(StrategyInstance).where(StrategyInstance.status.in_(["paper", "live"]))
             )
             instances = list(result.scalars().all())
+            risk_cfgs = {inst.id: await self._build_risk_cfg(session, inst) for inst in instances}
+            await session.commit()   # persist any risk profiles created on first access
 
         for inst in instances:
-            self._launch(inst, session_factory)
+            await self._rehydrate_risk_state(inst, session_factory)
+            self._launch(inst, risk_cfgs[inst.id], session_factory)
 
         logger.info("executor.booted", running=len(self._tasks))
 
-    def notify_status_change(self, instance, session_factory) -> None:
+    async def _build_risk_cfg(self, session, instance) -> RiskConfig:
+        """Merge the user's risk profile with the strategy's per-strategy overrides."""
+        from app.repositories.risk_profile_repository import RiskProfileRepository
+        from app.services.risk_profile_service import RiskProfileService
+        profile = await RiskProfileService(RiskProfileRepository(session)).get_or_create(instance.user_id)
+        return _merge_risk_config(profile, instance)
+
+    async def _rehydrate_risk_state(self, instance, session_factory) -> None:
+        """Seed RiskManager state from persisted broker/ledger truth so drawdown and
+        max-position limits are correct immediately after a restart."""
+        market_type = classify_market(instance.symbol)
+        async with session_factory() as session:
+            adapter, _ = await self._resolve_adapter(
+                session, instance.status, instance.id, instance.user_id,
+                instance.broker_connection_id, market_type,
+            )
+            if adapter is None:
+                return
+            try:
+                await adapter.connect()
+                account = await adapter.get_account()
+                positions = await adapter.get_positions()
+            except Exception as exc:
+                logger.warning("executor.rehydrate_failed", strategy_id=str(instance.id), error=str(exc))
+                return
+            finally:
+                try:
+                    await adapter.disconnect()
+                except Exception:  # pragma: no cover - defensive
+                    pass
+            daily_pnl = await self._reconstruct_daily_pnl(session, instance.id)
+        # Count only this strategy's symbol: a live broker's get_positions() returns the whole
+        # account, and seeding an account-wide count would spuriously trip max_open_positions.
+        open_positions = sum(1 for p in positions if p.symbol == instance.symbol)
+        self._risk.seed_state(
+            instance.id, equity=account.equity, open_position_count=open_positions,
+            peak_equity=instance.peak_equity,   # persisted high-water mark (None on first run)
+            daily_pnl=daily_pnl,
+        )
+
+    async def _reconstruct_daily_pnl(self, session, strategy_id) -> float:
+        """Sum realized P&L of today's (UTC) closes so the daily-drawdown kill switch
+        resumes accurately after a restart."""
+        from sqlalchemy import select
+        from app.models.db.order_record import OrderRecord
+
+        midnight = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        stmt = select(OrderRecord.realized_pnl, OrderRecord.created_at).where(
+            OrderRecord.strategy_instance_id == strategy_id,
+            OrderRecord.status == ACTION_CLOSED,
+        )
+        total = 0.0
+        for pnl, created in (await session.execute(stmt)).all():
+            if pnl is None:
+                continue
+            when = created if created.tzinfo else created.replace(tzinfo=timezone.utc)
+            if when >= midnight:
+                total += pnl
+        return total
+
+    def notify_status_change(self, instance, risk_cfg: RiskConfig, session_factory) -> None:
         """Called when a strategy's status changes — starts or stops its loop."""
         sid = str(instance.id)
         if instance.status in ("paper", "live"):
             if sid not in self._tasks:
-                self._launch(instance, session_factory)
+                # Explicitly (re)activating a strategy is the manual authorization to
+                # clear any prior kill-switch halt — otherwise the relaunched loop would
+                # be vetoed on every order by the stale halted flag.
+                self._risk.release_halt(instance.id, authorized_by="status_change")
+                self._launch(instance, risk_cfg, session_factory)
         else:
             self._stop(sid)
 
-    def notify_config_change(self, instance, session_factory) -> None:
-        """Called when a running strategy's execution/risk config is edited — restarts
-        its loop so the new config takes effect immediately. No-op if not running."""
+    def notify_config_change(self, instance, risk_cfg: RiskConfig, session_factory) -> None:
+        """Called when a running strategy's config is edited — restarts only that strategy's
+        loop so the new (merged) config takes effect immediately. No-op if not running."""
         sid = str(instance.id)
         if sid in self._tasks and instance.status in ("paper", "live"):
             self._stop(sid)
-            self._launch(instance, session_factory)
+            self._launch(instance, risk_cfg, session_factory)
             logger.info("executor.config_reloaded", strategy_id=sid)
 
     def shutdown(self) -> None:
@@ -102,13 +169,13 @@ class StrategyExecutor:
 
     # ── Internal ─────────────────────────────────────────────────────────────────
 
-    def _launch(self, instance, session_factory) -> None:
+    def _launch(self, instance, risk_cfg: RiskConfig, session_factory) -> None:
         sid = str(instance.id)
         task = asyncio.create_task(
             self._run_loop(
                 instance.id, instance.class_name, instance.symbol, instance.timeframe,
                 instance.parameters, instance.user_id, instance.status,
-                instance.broker_connection_id, _risk_config_from_instance(instance),
+                instance.broker_connection_id, risk_cfg,
                 instance.allow_short, instance.poll_seconds, session_factory,
             ),
             name=f"strategy_{sid}",
@@ -119,6 +186,10 @@ class StrategyExecutor:
 
     def _stop(self, strategy_id: str) -> None:
         task = self._tasks.pop(strategy_id, None)
+        # Drop the new-bar cursor so a subsequent relaunch (e.g. a config reload) re-evaluates
+        # the current bar with the new config instead of waiting for the next bar close — and
+        # so the dict doesn't leak entries for stopped strategies.
+        self._last_bar_ts.pop(strategy_id, None)
         if task:
             task.cancel()
             logger.info("executor.stopped", strategy_id=strategy_id)
@@ -154,6 +225,7 @@ class StrategyExecutor:
                 if not keep_going:
                     logger.warning("executor.halted", strategy_id=str(strategy_id))
                     self._tasks.pop(str(strategy_id), None)
+                    self._last_bar_ts.pop(str(strategy_id), None)
                     break
             except asyncio.CancelledError:
                 break
@@ -182,10 +254,15 @@ class StrategyExecutor:
         """Run one poll cycle. Returns False if the strategy should stop (halted)."""
         from app.domain.backtest.data_provider import fetch_ohlcv
         from app.domain.strategy.base import StrategyRegistry
+        from app.domain.strategy.loader import load_user_strategies
         from app.api.ws.manager import manager
 
-        # Ensure strategy classes are registered
+        # Ensure strategy classes are registered — built-ins always, user_strategies/*.py
+        # only when the requested class isn't registered yet (avoids a filesystem glob on
+        # every poll cycle).
         importlib.import_module("app.domain.strategy.examples.sma_crossover")
+        if class_name not in StrategyRegistry.list_all():
+            load_user_strategies()
 
         bars = await fetch_ohlcv(symbol=symbol, timeframe=timeframe, limit=200)
         if not bars:
@@ -242,7 +319,7 @@ class StrategyExecutor:
     ) -> List[ExecutionOutcome]:
         market_type = classify_market(symbol)
         adapter, broker_id = await self._resolve_adapter(
-            session, status, strategy_id, user_id, broker_connection_id, market_type, latest_close
+            session, status, strategy_id, user_id, broker_connection_id, market_type
         )
         if adapter is None:
             self._persist_order_record(
@@ -256,6 +333,7 @@ class StrategyExecutor:
                 adapter.set_mark(symbol, latest_close)
             await adapter.connect()
             account = await adapter.get_account()
+            self._risk.observe_equity(strategy_id, account.equity)   # track high-water mark
             positions = await adapter.get_positions()
             pos = next((p for p in positions if p.symbol == symbol), None)
 
@@ -274,6 +352,18 @@ class StrategyExecutor:
                 if self._should_persist(o):
                     self._persist_order_record(session, strategy_id, user_id, symbol, o)
             return outcomes
+        except Exception as exc:
+            # Broker/network failure (connect, get_account, get_positions, …). Record it as an
+            # error outcome so error_count advances and the strategy eventually halts, matching
+            # the no-connection branch — rather than propagating and retrying forever.
+            # Roll back first: a DB-origin failure (e.g. the paper ledger flush) leaves the
+            # session in a failed-transaction state, and persisting/committing on it would raise
+            # PendingRollbackError and skip the error accounting.
+            await session.rollback()
+            logger.error("executor.trade_failed", strategy_id=str(strategy_id), error=str(exc))
+            outcome = ExecutionOutcome(action=ACTION_ERROR, reason=str(exc))
+            self._persist_order_record(session, strategy_id, user_id, symbol, outcome)
+            return [outcome]
         finally:
             try:
                 await adapter.disconnect()
@@ -282,7 +372,7 @@ class StrategyExecutor:
 
     async def _resolve_adapter(
         self, session, status, strategy_id, user_id, broker_connection_id,
-        market_type: MarketType, latest_close: float,
+        market_type: MarketType,
     ) -> Tuple[Optional[BrokerAdapter], str]:
         if status == "paper":
             from app.domain.broker.adapters.simulated_adapter import SimulatedBrokerAdapter
@@ -343,6 +433,7 @@ class StrategyExecutor:
             broker_order_id=o.order_result.broker_order_id if o.order_result else None,
             filled_qty=o.fill.filled_quantity if o.fill else None,
             avg_price=o.fill.avg_price if o.fill else None,
+            realized_pnl=o.realized_pnl,
             signal_id=order.signal_id if order else None,
         ))
 
@@ -354,6 +445,11 @@ class StrategyExecutor:
 
         if signals:
             inst.last_signal_at = now
+
+        # Persist the running high-water mark so total-drawdown survives a restart.
+        peak = self._risk.peak_equity(strategy_id)
+        if peak is not None:
+            inst.peak_equity = peak
 
         halted = any(o.halted for o in outcomes)
         errored = any(o.action == ACTION_ERROR for o in outcomes)
@@ -394,17 +490,21 @@ class StrategyExecutor:
             })
 
 
-def _risk_config_from_instance(instance) -> RiskConfig:
-    """Build a RiskConfig from a strategy instance's per-strategy config columns."""
+def _merge_risk_config(profile, instance) -> RiskConfig:
+    """Merge the user's RiskProfile (defaults) with the strategy's per-strategy overrides.
+    A NULL override inherits the profile value; position size is always per-strategy."""
+    def pick(override, default):
+        return override if override is not None else default
+
     return RiskConfig(
         max_position_size_pct=instance.size_pct,
-        max_open_positions=instance.max_open_positions,
-        max_daily_drawdown_pct=instance.max_daily_drawdown_pct,
-        max_total_drawdown_pct=instance.max_total_drawdown_pct,
-        stop_loss_pct=instance.stop_loss_pct,
-        take_profit_pct=instance.take_profit_pct,
-        max_orders_per_minute=instance.max_orders_per_minute,
-        kill_switch_enabled=instance.kill_switch_enabled,
+        stop_loss_pct=pick(instance.stop_loss_pct, profile.stop_loss_pct),
+        take_profit_pct=pick(instance.take_profit_pct, profile.take_profit_pct),
+        max_open_positions=pick(instance.max_open_positions, profile.max_open_positions),
+        max_daily_drawdown_pct=pick(instance.max_daily_drawdown_pct, profile.max_daily_drawdown_pct),
+        max_total_drawdown_pct=pick(instance.max_total_drawdown_pct, profile.max_total_drawdown_pct),
+        max_orders_per_minute=pick(instance.max_orders_per_minute, profile.max_orders_per_minute),
+        kill_switch_enabled=pick(instance.kill_switch_enabled, profile.kill_switch_enabled),
     )
 
 

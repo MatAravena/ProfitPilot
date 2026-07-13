@@ -2,11 +2,14 @@ from __future__ import annotations
 from typing import Annotated, List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import LOCAL_USER_ID, get_db
 from app.domain.strategy.loader import get_all_strategy_classes
+from app.models.db.order_record import OrderRecord
+from app.models.schemas.order_schemas import OrderRecordResponse
 from app.models.schemas.strategy_schemas import (
     CreateStrategyRequest,
     StrategyInstanceResponse,
@@ -16,11 +19,21 @@ from app.models.schemas.strategy_schemas import (
 from app.repositories.strategy_instance_repository import StrategyInstanceRepository
 from app.services.strategy_service import StrategyService
 
+
 router = APIRouter(prefix="/strategies", tags=["strategies"])
 
 
 def _get_service(db: Annotated[AsyncSession, Depends(get_db)]) -> StrategyService:
     return StrategyService(StrategyInstanceRepository(db))
+
+
+async def _build_risk_cfg(db: AsyncSession, instance):
+    """Merge the user's risk profile with this strategy's overrides for the executor."""
+    from app.repositories.risk_profile_repository import RiskProfileRepository
+    from app.services.risk_profile_service import RiskProfileService
+    from app.services.strategy_executor import _merge_risk_config
+    profile = await RiskProfileService(RiskProfileRepository(db)).get_or_create(instance.user_id)
+    return _merge_risk_config(profile, instance)
 
 
 @router.get("/classes")
@@ -32,6 +45,24 @@ async def list_strategy_classes():
 async def list_strategies(svc: Annotated[StrategyService, Depends(_get_service)]):
     instances = await svc.list(LOCAL_USER_ID)
     return [StrategyInstanceResponse.from_instance(i) for i in instances]
+
+
+@router.get("/{strategy_id}/orders", response_model=List[OrderRecordResponse])
+async def list_strategy_orders(
+    strategy_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    limit: int = Query(200, ge=1, le=500),
+):
+    """Order attempts for one strategy (newest first) — powers the chart markers."""
+    q = (
+        select(OrderRecord)
+        .where(OrderRecord.user_id == LOCAL_USER_ID)
+        .where(OrderRecord.strategy_instance_id == strategy_id)
+        .order_by(OrderRecord.created_at.desc())
+        .limit(limit)
+    )
+    result = await db.execute(q)
+    return list(result.scalars().all())
 
 
 @router.post("", response_model=StrategyInstanceResponse, status_code=201)
@@ -57,9 +88,10 @@ async def update_strategy_config(
 
     try:
         instance = await svc.update_config(strategy_id, LOCAL_USER_ID, body)
+        risk_cfg = await _build_risk_cfg(db, instance)
         await db.commit()
-        # Restart the loop (if running) so the new config takes effect immediately.
-        executor.notify_config_change(instance, AsyncSessionLocal)
+        # Restart only this strategy's loop so the new merged config takes effect immediately.
+        executor.notify_config_change(instance, risk_cfg, AsyncSessionLocal)
         return StrategyInstanceResponse.from_instance(instance)
     except KeyError:
         raise HTTPException(status_code=404, detail="Strategy not found")
@@ -77,9 +109,10 @@ async def update_strategy_status(
 
     try:
         instance = await svc.update_status(strategy_id, LOCAL_USER_ID, body.status)
+        risk_cfg = await _build_risk_cfg(db, instance)
         await db.commit()
         # Start or stop the execution loop for this strategy
-        executor.notify_status_change(instance, AsyncSessionLocal)
+        executor.notify_status_change(instance, risk_cfg, AsyncSessionLocal)
         return StrategyInstanceResponse.from_instance(instance)
     except KeyError:
         raise HTTPException(status_code=404, detail="Strategy not found")

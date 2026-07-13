@@ -19,8 +19,11 @@ Algorithmic trading platform with ML forecasting, multi-broker execution, and an
 - **Backtesting** — run any registered strategy against Yahoo Finance / Bybit historical data, see equity curve, trade markers, and full performance metrics (Sharpe, max drawdown, win rate, profit factor)
 - **Strategy system** — built-in SMA crossover, RSI mean reversion, MACD, Bollinger Bands; user-defined strategies auto-loaded from `backend/user_strategies/`
 - **AI Strategy Builder** — describe a strategy in plain English, generate Python code via Claude, run a sandbox backtest — all in the browser
-- **Live/paper executor** — asyncio loop that polls market data per strategy timeframe, persists signals to DB, notifies via WebSocket
-- **Broker adapters** — Alpaca, Bybit, Binance (adapters implemented; Bybit testnet tested)
+- **Live/paper trade pipeline** — one executor loop per active strategy runs the full chain: `signal → position sizing → RiskManager veto → broker → fill → persistence`. Paper trading uses a built-in `SimulatedBrokerAdapter` with a durable virtual ledger (zero broker setup); live uses a real broker connection. Signals and every order attempt are persisted; orders broadcast over WebSocket
+- **Risk profile + per-strategy overrides** — a per-user risk profile (SL/TP, drawdown limits, max positions, order rate, kill switch) sets the defaults, edited in Settings; each strategy carries behavioral config (position size, `allow_short`, poll) plus **optional risk overrides** (blank = inherit the profile). Editing a strategy's config restarts only that bot (live-adapts); changing the profile only refreshes form defaults, never running bots. Backtests take arrangeable SL/TP per run
+- **Loop-managed stops + new-bar gating** — stop-loss / take-profit are checked every poll and never blocked by the risk veto; signals regenerate only once per closed bar
+- **Restart-safe** — positions, peak equity, open-position count, and today's realized P&L are rehydrated from persisted state on boot
+- **Broker adapters** — Alpaca, Bybit, Binance (through a common `BrokerAdapter`). Live path is covered by integration tests with a fake adapter; a Bybit **testnet** smoke-test runbook is in `docs/runbooks/testnet-smoke-test.md`
 - **WebSocket** — real-time portfolio snapshots every 15s, strategy status, signal events
 - **OHLCV caching** — cache-aside pattern; bars stored in SQLite, fetched from Yahoo Finance / Bybit with pagination
 - **6 frontend pages** — Dashboard, Portfolio, Backtests, Strategies, Builder, Settings
@@ -125,7 +128,7 @@ Every broker call, model call, and order must go through its adapter — never c
 
 ### Risk defaults
 
-Max position 2% · Max 5 open positions · Daily drawdown limit 3% · Total drawdown limit 10% · Mandatory stop-loss 1.5% · Max 10 orders/min. Enforced by `RiskManager`, configurable via `.env`.
+Max position 2% · Max 5 open positions · Daily drawdown limit 3% · Total drawdown limit 10% · Mandatory stop-loss 1.5% · Max 10 orders/min. Enforced by `RiskManager`. These are the global defaults (via `.env`); **each strategy instance can override them** through its own execution/risk config (editable in the Strategies page and applied live).
 
 ---
 
@@ -184,8 +187,13 @@ ProfitPilot/
 cd backend
 pip install -r requirements.txt
 cp .env.example .env        # fill in API keys
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
+
+> Bind to `127.0.0.1` (loopback) for local use. Phase 1 has **no authentication** and the strategy
+> sandbox is not a hardened security boundary, so `--host 0.0.0.0` would expose the full API — order
+> placement, broker connections, arbitrary strategy code — to everyone on your network. Only use
+> `0.0.0.0` if you deliberately intend to share on a trusted LAN.
 
 API docs: `http://localhost:8000/api/docs`
 
@@ -248,7 +256,10 @@ class MyStrategy(StrategyBase):
     async def on_fill(self, fill): pass
 ```
 
-It appears in Backtests and Strategies pages automatically on next restart.
+It appears in Backtests and Strategies pages automatically on next restart. For copy-paste
+starting points, see `backend/user_strategies/TEMPLATE.py` (fully commented) and
+`always_long.py` (a minimal deterministic strategy used for execution smoke tests). Define a
+module-level `STRATEGY_META` dict to get a parameter form in the UI.
 
 ---
 
@@ -276,12 +287,13 @@ class MyBrokerAdapter(BrokerAdapter):
 - [x] Yahoo Finance + Bybit data providers with OHLCV caching
 - [x] AI Strategy Builder (Monaco + Claude + sandbox execution)
 - [x] Live/paper strategy executor with WebSocket signals
-- [x] Broker adapters: Alpaca, Bybit, Binance
-- [x] React frontend — 6 pages wired to backend
-- [ ] Fix remaining startup errors (OhlcvBar model, OhlcvRepository)
-- [ ] End-to-end test: paper strategy → signals persisted → WebSocket push
-- [ ] Bybit testnet integration test
-- [ ] Structured FE error messages + toast notifications
+- [x] Full trade pipeline: sizing → RiskManager → broker → fill → persistence (paper via built-in simulator)
+- [x] Per-strategy risk/execution config (live-editable), loop-managed stops, new-bar gating, restart rehydration
+- [x] Broker adapters: Alpaca, Bybit, Binance; live path covered by tests (fake adapter)
+- [x] React frontend — 6 pages wired to backend; per-strategy config form on the Strategies page
+- [x] Structured FE error messages + toast notifications
+- [ ] Real Bybit **testnet** smoke run (runbook ready — needs API keys)
+- [ ] Live broker fill-confirmation (Bybit returns `submitted`; reconciled next poll)
 
 ### Phase 1.5 — ML Forecasting
 

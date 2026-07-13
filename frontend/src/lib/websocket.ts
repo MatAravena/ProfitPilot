@@ -6,28 +6,66 @@ import type { WSMessage, SignalRecord } from '@/types'
 
 const MAX_RECONNECT_DELAY = 30_000
 
-class TradingWebSocket {
+// Heartbeat: send a ping on an interval and expect a pong back. If the pong
+// doesn't arrive in time the connection is treated as dead (half-open) and torn
+// down so the normal reconnect path can re-establish it.
+export const HEARTBEAT_INTERVAL = 20_000
+export const PONG_TIMEOUT = 10_000
+
+export class TradingWebSocket {
   private ws: WebSocket | null = null
   private reconnectDelay = 1_000
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
+  private shouldReconnect = false
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null
+  private pongTimer: ReturnType<typeof setTimeout> | null = null
   private handlers = new Map<string, Set<(data: unknown) => void>>()
 
   connect() {
+    // Guard against overlapping sockets: a StrictMode re-mount or HMR update can
+    // re-invoke this while a socket is already opening/open. Opening another one
+    // leaks the previous connection and causes reconnect churn.
+    if (
+      this.ws &&
+      (this.ws.readyState === WebSocket.CONNECTING || this.ws.readyState === WebSocket.OPEN)
+    ) {
+      return
+    }
+
+    this.shouldReconnect = true
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
+
     const { setStatus } = useWebSocketStore.getState()
     setStatus('connecting')
 
-    this.ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`)
+    // Bind handlers to this specific socket so a stale one that closes later
+    // can't mutate shared state after it has been replaced.
+    const socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`)
+    this.ws = socket
 
-    this.ws.onopen = () => {
+    socket.onopen = () => {
+      if (this.ws !== socket) return
       setStatus('connected')
       this.reconnectDelay = 1_000
+      this.startHeartbeat(socket)
       const { subscribedSymbols } = useWebSocketStore.getState()
       subscribedSymbols.forEach((s) => this.subscribe(s))
     }
 
-    this.ws.onmessage = (event: MessageEvent) => {
+    socket.onmessage = (event: MessageEvent) => {
       try {
         const msg = JSON.parse(event.data as string) as WSMessage
+        if (msg.channel === 'pong') {
+          // Heartbeat acknowledged — the connection is alive.
+          if (this.pongTimer) {
+            clearTimeout(this.pongTimer)
+            this.pongTimer = null
+          }
+          return
+        }
         this.dispatch(msg.channel, msg.data)
         this.routeToStore(msg)
       } catch {
@@ -35,21 +73,62 @@ class TradingWebSocket {
       }
     }
 
-    this.ws.onclose = () => {
+    socket.onclose = () => {
+      if (this.ws !== socket) return // superseded socket — ignore
+      this.stopHeartbeat()
+      this.ws = null
       setStatus('disconnected')
-      this.scheduleReconnect()
+      if (this.shouldReconnect) this.scheduleReconnect()
     }
 
-    this.ws.onerror = () => {
+    socket.onerror = () => {
+      if (this.ws !== socket) return
       setStatus('error')
-      this.ws?.close()
+      socket.close()
     }
   }
 
   disconnect() {
-    if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
-    this.ws?.close()
+    // Deliberate teardown: never reconnect, and detach handlers so this close
+    // can't trigger the reconnect path.
+    this.shouldReconnect = false
+    this.stopHeartbeat()
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
+    const socket = this.ws
     this.ws = null
+    if (socket) {
+      socket.onopen = socket.onmessage = socket.onerror = socket.onclose = null
+      socket.close()
+    }
+  }
+
+  private startHeartbeat(socket: WebSocket) {
+    this.stopHeartbeat()
+    this.heartbeatTimer = setInterval(() => {
+      if (this.ws !== socket) return
+      this.send({ type: 'ping' })
+      // Arm the watchdog: a pong must arrive before it fires, or we assume the
+      // socket is half-open and close it to force a reconnect.
+      if (this.pongTimer) clearTimeout(this.pongTimer)
+      this.pongTimer = setTimeout(() => {
+        this.pongTimer = null
+        socket.close()
+      }, PONG_TIMEOUT)
+    }, HEARTBEAT_INTERVAL)
+  }
+
+  private stopHeartbeat() {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer)
+      this.heartbeatTimer = null
+    }
+    if (this.pongTimer) {
+      clearTimeout(this.pongTimer)
+      this.pongTimer = null
+    }
   }
 
   subscribe(channel: string) {
@@ -96,7 +175,9 @@ class TradingWebSocket {
   }
 
   private scheduleReconnect() {
+    if (this.reconnectTimer) return // a reconnect is already pending
     this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null
       this.reconnectDelay = Math.min(this.reconnectDelay * 2, MAX_RECONNECT_DELAY)
       this.connect()
     }, this.reconnectDelay)
