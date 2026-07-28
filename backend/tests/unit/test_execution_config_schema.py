@@ -40,3 +40,15 @@ def test_from_instance_does_not_revalidate_persisted_values():
     cfg = ExecutionConfig.from_instance(legacy)   # would raise under input validation
     assert cfg.stop_loss_pct == 0.0
     assert cfg.max_open_positions == 0
+
+
+def test_execution_config_fields_map_to_orm_columns():
+    # Single-source-of-truth guard: ExecutionConfig is the canonical config field set, and
+    # from_instance / _config_columns derive their field lists from it. Every field must have
+    # a matching StrategyInstance column, or a read/write silently drops it. This fails loudly
+    # if the schema and the ORM model ever drift.
+    from app.models.db.strategy_instance import StrategyInstance
+
+    columns = set(StrategyInstance.__table__.columns.keys())
+    missing = [name for name in ExecutionConfig.model_fields if name not in columns]
+    assert not missing, f"ExecutionConfig fields without a StrategyInstance column: {missing}"

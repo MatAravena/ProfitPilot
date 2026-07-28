@@ -5,8 +5,9 @@ from typing import List, Optional
 
 import structlog
 
+from app.core.constants import MIN_BACKTEST_BARS
 from app.core.enums import Timeframe
-from app.core.types import OHLCV
+from app.core.types import OHLCV, RiskConfig
 from app.domain.backtest.data_provider import fetch_ohlcv
 from app.domain.backtest.engine import BacktestEngine, BacktestResult
 from app.domain.strategy.base import StrategyRegistry
@@ -30,6 +31,9 @@ _TIMEFRAME_MAP = {
 
 # Bars within this tolerance of the requested boundary are considered covered
 _DATE_TOLERANCE = timedelta(days=5)
+
+# Max bars fetched per data-provider request (providers page internally as needed).
+_FETCH_LIMIT = 1000
 
 
 def _row_to_ohlcv(row: OhlcvBar, timeframe: Timeframe) -> OHLCV:
@@ -75,11 +79,18 @@ class BacktestService:
 
         bars = await self._get_bars(req, timeframe)
 
-        if len(bars) < 60:
+        if len(bars) < MIN_BACKTEST_BARS:
             raise ValueError(
                 f"Not enough data returned ({len(bars)} bars). "
                 "Try a longer date range or smaller timeframe."
             )
+
+        # None → apply the live risk model's default (RiskConfig.max_position_size_pct) so a
+        # backtest sizes positions exactly like the live executor and its curve reflects live
+        # magnitude. Single source of truth: the default lives on RiskConfig, not duplicated here.
+        size_pct = req.position_size_pct
+        if size_pct is None:
+            size_pct = RiskConfig().max_position_size_pct
 
         engine = BacktestEngine(
             strategy=strategy,
@@ -88,6 +99,8 @@ class BacktestService:
             commission_pct=req.commission_pct,
             stop_loss_pct=req.stop_loss_pct,
             take_profit_pct=req.take_profit_pct,
+            position_size_pct=size_pct,
+            slippage_pct=req.slippage_pct,
         )
         return await engine.run()
 
@@ -96,10 +109,10 @@ class BacktestService:
         from app.db.base import AsyncSessionLocal
 
         # Skip cache when no start bound — can't validate coverage without a lower bound.
-        # Always fetch fresh with limit=1000; yfinance_provider will derive start from end.
+        # Always fetch fresh (up to _FETCH_LIMIT bars); yfinance_provider derives start from end.
         if req.start is None:
             logger.info("backtest.service.run", strategy=req.strategy_name, symbol=req.symbol)
-            return await fetch_ohlcv(symbol=req.symbol, timeframe=timeframe, limit=1000, end=req.end)
+            return await fetch_ohlcv(symbol=req.symbol, timeframe=timeframe, limit=_FETCH_LIMIT, end=req.end)
 
         async with AsyncSessionLocal() as session:
             repo = OhlcvRepository(session)
@@ -123,7 +136,7 @@ class BacktestService:
             bars = await fetch_ohlcv(
                 symbol=req.symbol,
                 timeframe=timeframe,
-                limit=1000,
+                limit=_FETCH_LIMIT,
                 start=req.start,
                 end=req.end,
             )

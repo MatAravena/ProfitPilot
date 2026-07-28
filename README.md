@@ -16,11 +16,11 @@ Algorithmic trading platform with ML forecasting, multi-broker execution, and an
 
 ## What Works Today
 
-- **Backtesting** — run any registered strategy against Yahoo Finance / Bybit historical data, see equity curve, trade markers, and full performance metrics (Sharpe, max drawdown, win rate, profit factor)
+- **Backtesting** — run any registered strategy against Yahoo Finance / Bybit historical data, see equity curve, trade markers, and full performance metrics (Sharpe, max drawdown, win rate, profit factor). Positions are sized with the **same risk model as live trading** (`position_size_pct`, default 2%), so a backtest's equity curve reflects the magnitude the strategy would actually trade live — not an all-in curve that overstates returns. Fills carry realistic costs: flat **commission** plus **adverse slippage** (`slippage_pct`, default 5 bps — buys fill higher, sells lower), so results aren't optimistically frictionless
 - **Strategy system** — built-in SMA crossover, RSI mean reversion, MACD, Bollinger Bands; user-defined strategies auto-loaded from `backend/user_strategies/`
 - **AI Strategy Builder** — describe a strategy in plain English, generate Python code via Claude, run a sandbox backtest — all in the browser
 - **Live/paper trade pipeline** — one executor loop per active strategy runs the full chain: `signal → position sizing → RiskManager veto → broker → fill → persistence`. Paper trading uses a built-in `SimulatedBrokerAdapter` with a durable virtual ledger (zero broker setup); live uses a real broker connection. Signals and every order attempt are persisted; orders broadcast over WebSocket
-- **Risk profile + per-strategy overrides** — a per-user risk profile (SL/TP, drawdown limits, max positions, order rate, kill switch) sets the defaults, edited in Settings; each strategy carries behavioral config (position size, `allow_short`, poll) plus **optional risk overrides** (blank = inherit the profile). Editing a strategy's config restarts only that bot (live-adapts); changing the profile only refreshes form defaults, never running bots. Backtests take arrangeable SL/TP per run
+- **Risk profile + per-strategy overrides** — a per-user risk profile (SL/TP, drawdown limits, max positions, order rate, kill switch) sets the defaults, edited in Settings; each strategy carries behavioral config (position size, `allow_short`, poll) plus **optional risk overrides** (blank = inherit the profile). Editing a strategy's config restarts only that bot (live-adapts); changing the profile only refreshes form defaults, never running bots. Backtests take arrangeable SL/TP **and position size %** per run (position size defaults to the live 2%, so backtest ≈ live)
 - **Loop-managed stops + new-bar gating** — stop-loss / take-profit are checked every poll and never blocked by the risk veto; signals regenerate only once per closed bar
 - **Restart-safe** — positions, peak equity, open-position count, and today's realized P&L are rehydrated from persisted state on boot
 - **Broker adapters** — Alpaca, Bybit, Binance (through a common `BrokerAdapter`). Live path is covered by integration tests with a fake adapter; a Bybit **testnet** smoke-test runbook is in `docs/runbooks/testnet-smoke-test.md`
@@ -28,6 +28,87 @@ Algorithmic trading platform with ML forecasting, multi-broker execution, and an
 - **OHLCV caching** — cache-aside pattern; bars stored in SQLite, fetched from Yahoo Finance / Bybit with pagination
 - **6 frontend pages** — Dashboard, Portfolio, Backtests, Strategies, Builder, Settings
 - **i18n** — English and Spanish
+
+---
+
+## How It Works
+
+Three pieces do the heavy lifting: the **backtest engine** (simulates a strategy on past data), the
+**backtesting flow** (feeds it historical data), and the **live/paper executor** (runs a strategy
+forward on fresh data). They deliberately share the same sizing and cost model so a backtest is an
+honest preview of live — not an optimistic one.
+
+### 1. The backtest engine — `app/domain/backtest/engine.py`
+
+Walks the price history **one bar at a time**. On each bar it shows the strategy only the data up to
+and including that bar (never the future), asks for a signal, and — if there's one — **fills it at the
+next bar's open**, never at the same bar's close. That one rule kills the most common way backtests
+lie to you (acting on a price you couldn't actually have traded at).
+
+- **One position at a time**, long or short.
+- **Position sizing = equity × `position_size_pct`** (default 2%) — the *same* formula the live
+  executor uses, so the equity curve reflects live magnitude, not an all-in curve.
+- **Realistic costs on every fill**: a flat **commission** per side **plus adverse slippage**
+  (`slippage_pct`, default 5 bps) — you buy a touch higher and sell a touch lower, modeling the
+  spread + market impact.
+- **Stops & targets** are checked against each bar's high/low and fill at the trigger price (stop
+  before target, i.e. the conservative outcome when a bar hits both).
+- Produces the **equity curve, every trade, and metrics** (total return, Sharpe, max drawdown, win
+  rate, profit factor).
+
+_Could be improved:_ slippage is a flat rate (a volatility-scaled version would cost more in choppy
+markets); there's no partial-fill or latency modeling. Robustness tooling (walk-forward, Monte Carlo)
+is planned, not built.
+
+### 2. Backtesting flow — `app/services/backtest_service.py`
+
+Fetches historical OHLCV from **Yahoo Finance** (primary) with a **Bybit** fallback for crypto, using
+a **cache-aside** pattern (bars are stored in SQLite and reused when a later run covers the same
+range). All bars are normalized to **naive UTC** and passed through a single `dedupe_sort_bars`
+chokepoint, so timestamps are always ascending and unique regardless of source (guards against
+provider pagination overlap and DST-boundary duplicates). It needs at least 60 bars, then hands them
+to the engine and returns the result to the `/backtests` page.
+
+_Could be improved:_ data quality depends on the free providers (gaps, no true tick history);
+survivorship/point-in-time correctness isn't guaranteed for all symbols.
+
+### 3. Live / paper executor — `app/services/strategy_executor.py`
+
+One background task per active strategy. Each cycle it fetches the latest bars on the strategy's
+timeframe, and **only when a new bar has closed** asks for a signal (stops are still checked every
+poll). A signal then flows through the full chain:
+
+```
+signal → position sizing (equity × size%) → RiskManager veto (hard, cannot be bypassed) → broker → fill → persist → WebSocket broadcast
+```
+
+- **Paper** uses a built-in `SimulatedBrokerAdapter` — a durable virtual ledger, zero broker setup,
+  fills at the latest close **with the same commission + slippage the backtest applies** (config
+  `SIM_COMMISSION_PCT` / `SIM_SLIPPAGE_PCT`), so paper P&L matches a backtest and previews real live
+  costs. **Live** uses a real broker connection (Alpaca / Bybit / Binance).
+- **Same decision logic as the backtest.** Intent → action (open / close / full reversal) comes from
+  one shared `plan_actions` policy used by *both* the live executor and the backtest engine, so a
+  strategy that flips direction trades identically in both (a long→short flip closes **and** re-opens).
+- Signals and **every order attempt** are persisted; the frontend strategy page renders them live.
+- **Restart-safe**: positions, peak equity, open-position count, and today's realized P&L are
+  rehydrated on boot.
+
+_Could be improved:_ "live data" is currently **repeated polling** of recent bars, not a true tick
+stream (`stream_ticks()` is unimplemented); live broker fill-confirmation (real fill price/commission)
+is reconciled on the next poll rather than captured immediately. The one remaining intentional
+backtest↔live difference is fill *timing* (backtest fills next-bar open, live fills at the just-closed
+bar) — negligible for 24/7 crypto, and the honest choice for daily bars.
+
+### What this means for you (user side)
+
+- A good backtest is **necessary, not sufficient.** Keep `slippage_pct`, commission, and
+  `position_size_pct` realistic for your asset — a strategy that only works at zero cost is fragile.
+- **Validate out-of-sample.** One great backtest can be luck or overfitting; test on data you didn't
+  tune on.
+- **Always run paper before live**, and expect live results to sit *inside* the backtest's range, not
+  exactly on its line.
+- Write strategies that **only look at past bars** — the engine won't hand you the future, so don't
+  build logic that assumes it.
 
 ---
 
@@ -104,6 +185,12 @@ Feature Engineer (Rust-accelerated)
                     ▼
            BrokerAdapter.place_order()   (Alpaca / Bybit / Binance)
 ```
+
+### Design principles
+
+**SOLID and separation of concerns are enforced on every change**, not just new features. Each layer above has one responsibility and stays inside it — routers don't hold business logic, domain code never touches the DB or FastAPI, repositories don't decide policy. Behavior is extended by adding adapters/strategies (open/closed), and concrete implementations are injected against base-class abstractions (dependency inversion).
+
+**Single source of truth for shared mappings.** Field lists and mappings are derived, never hand-maintained in parallel. For example, a strategy's per-strategy execution/risk config field set is defined once on the `ExecutionConfig` schema; the ORM-read (`from_instance`) and ORM-write (`_config_columns`) paths both derive their fields from `ExecutionConfig.model_fields`, and a guard test fails if the schema and the `StrategyInstance` model ever drift. Adding a config field means one new column plus one Pydantic field — nothing else to keep in sync.
 
 ### Non-negotiable abstractions
 

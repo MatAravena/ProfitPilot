@@ -43,6 +43,7 @@ from typing import Any
 
 import structlog
 
+from app.core.constants import DEFAULT_WARMUP_BARS, MIN_BACKTEST_BARS
 from app.core.enums import Timeframe
 from app.domain.backtest.data_provider import fetch_ohlcv
 from app.domain.backtest.engine import BacktestEngine, BacktestResult
@@ -70,6 +71,9 @@ _SAFE_BUILTINS = {{
         'print', 'range', 'repr', 'reversed', 'round', 'set', 'slice',
         'sorted', 'str', 'sum', 'tuple', 'type', 'zip', 'None', 'True', 'False',
         'ValueError', 'TypeError', 'RuntimeError', 'StopIteration',
+        # Required for `class` statements — the user's strategy MUST define a class
+        # subclassing StrategyBase, and CPython compiles that to a __build_class__ call.
+        '__build_class__',
     )
 }}
 _SAFE_BUILTINS['__import__'] = None   # block all imports inside user code
@@ -126,6 +130,9 @@ class StrategyBase:
 _USER_NS = {{'StrategyBase': StrategyBase, 'signal': signal,
              'LONG': LONG, 'SHORT': SHORT, 'CLOSE': CLOSE, 'NEUTRAL': NEUTRAL,
              'math': math, 'statistics': statistics,
+             # __name__ is read by __build_class__ to set each class's __module__;
+             # without it, defining the strategy class raises NameError.
+             '__name__': '<strategy>',
              '__builtins__': _SAFE_BUILTINS}}
 
 exec(compile({user_code!r}, '<strategy>', 'exec'), _USER_NS)
@@ -138,8 +145,10 @@ for _v in _USER_NS.values():
         break
 
 if _StratClass is None:
+    # Exit 0 so the parent reads this structured error from stdout (a non-zero exit
+    # is treated as an opaque stderr crash and would hide this message from the user).
     print(json.dumps({{'error': 'No class found that subclasses StrategyBase'}}))
-    sys.exit(1)
+    sys.exit(0)
 
 # ── Read bars from stdin ───────────────────────────────────────────────────
 
@@ -197,7 +206,7 @@ async def sandbox_run(
 
     # Fetch OHLCV data (uses yfinance/Bybit like the normal backtest)
     bars = await fetch_ohlcv(symbol=symbol, timeframe=tf, limit=limit)
-    if len(bars) < 60:
+    if len(bars) < MIN_BACKTEST_BARS:
         raise ValueError(f"Not enough data ({len(bars)} bars). Try a longer timeframe.")
 
     # Build the harness script with user code embedded
@@ -208,7 +217,7 @@ async def sandbox_run(
         "symbol": symbol,
         "timeframe": timeframe_str,
         "parameters": parameters or {},
-        "warmup": 50,
+        "warmup": DEFAULT_WARMUP_BARS,
         "bars": [
             {
                 "time": int(b.timestamp.timestamp()),

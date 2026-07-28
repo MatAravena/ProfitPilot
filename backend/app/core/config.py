@@ -63,8 +63,11 @@ class Settings(BaseSettings):
     DEFAULT_STOP_LOSS_PCT: float = 0.015
     DEFAULT_MAX_ORDERS_PER_MINUTE: int = 10
 
-    # Paper-trading simulator
+    # Paper-trading simulator. Costs mirror the backtest engine's defaults so a paper run is a
+    # faithful preview of a backtest (and of real live), not an artificially frictionless one.
     SIM_STARTING_EQUITY: float = 100_000.0    # virtual starting cash for paper strategies
+    SIM_COMMISSION_PCT: float = 0.001         # 0.1% of notional per fill
+    SIM_SLIPPAGE_PCT: float = 0.0005          # 5 bps adverse slippage per fill
 
     # JWT
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24h

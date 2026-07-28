@@ -7,6 +7,7 @@ import structlog
 
 from app.core.enums import Timeframe
 from app.core.types import OHLCV
+from app.domain.market_data.normalize import dedupe_sort_bars
 
 logger = structlog.get_logger(__name__)
 
@@ -42,14 +43,16 @@ async def fetch_ohlcv(
     try:
         bars = await _yf_fetch(symbol=symbol, timeframe=timeframe, limit=limit, start=start, end=end)
         if bars:
-            return bars
+            # Single chokepoint: guarantee ascending, unique timestamps regardless of source.
+            return dedupe_sort_bars(bars)
     except Exception as exc:
         logger.warning("data_provider.yfinance_failed", symbol=symbol, error=str(exc))
 
     # Fallback: Bybit public API (crypto only)
     if symbol.upper() in _BYBIT_SYMBOLS:
         logger.info("data_provider.bybit_fallback", symbol=symbol)
-        return await _fetch_bybit_paginated(symbol=symbol, timeframe=timeframe, start=start, end=end)
+        bars = await _fetch_bybit_paginated(symbol=symbol, timeframe=timeframe, start=start, end=end)
+        return dedupe_sort_bars(bars)
 
     logger.warning("data_provider.no_source", symbol=symbol)
     return []
@@ -83,14 +86,8 @@ async def _fetch_bybit_paginated(
         # Move the window back to just before the earliest bar in this page
         current_end = page[0].timestamp - timedelta(milliseconds=1)
 
-    # Deduplicate (overlap safety) and filter to requested bounds
-    seen: set = set()
-    result: List[OHLCV] = []
-    for bar in all_bars:
-        if bar.timestamp not in seen:
-            seen.add(bar.timestamp)
-            result.append(bar)
-
+    # Deduplicate + sort (pagination overlap safety), then filter to requested bounds.
+    result = dedupe_sort_bars(all_bars)
     if start:
         result = [b for b in result if b.timestamp >= start]
     if end:

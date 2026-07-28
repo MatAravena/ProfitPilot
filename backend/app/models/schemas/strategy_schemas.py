@@ -36,18 +36,11 @@ class ExecutionConfig(BaseModel):
         # model_construct: reading persisted state must not re-run input validators. A row
         # written under looser bounds (or a bound we later tighten) would otherwise raise on
         # read and 500 the whole list endpoint. Column values are already trusted.
-        return cls.model_construct(
-            size_pct=inst.size_pct,
-            stop_loss_pct=inst.stop_loss_pct,
-            take_profit_pct=inst.take_profit_pct,
-            max_open_positions=inst.max_open_positions,
-            max_daily_drawdown_pct=inst.max_daily_drawdown_pct,
-            max_total_drawdown_pct=inst.max_total_drawdown_pct,
-            max_orders_per_minute=inst.max_orders_per_minute,
-            allow_short=inst.allow_short,
-            kill_switch_enabled=inst.kill_switch_enabled,
-            poll_seconds=inst.poll_seconds,
-        )
+        #
+        # Field names are derived from the model itself — this class is the single source of
+        # truth for the config field set. Every ExecutionConfig field must have a matching
+        # StrategyInstance column (enforced by test_execution_config_fields_map_to_orm_columns).
+        return cls.model_construct(**{name: getattr(inst, name) for name in cls.model_fields})
 
 
 class CreateStrategyRequest(BaseModel):
@@ -65,7 +58,9 @@ class UpdateStrategyStatusRequest(BaseModel):
 
 
 class UpdateStrategyConfigRequest(ExecutionConfig):
-    """Full replacement of a strategy's execution/risk config."""
+    """Partial update of a strategy's execution/risk config: only fields present in
+    the request body are applied (see StrategyService.update_config + exclude_unset).
+    Omitted fields keep their current value; an explicit null clears a risk override."""
 
 
 class StrategyInstanceResponse(BaseModel):

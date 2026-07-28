@@ -43,6 +43,8 @@ class SimulatedBrokerAdapter(BrokerAdapter):
         user_id: UUID,
         starting_equity: float,
         market_type: MarketType = MarketType.CRYPTO,
+        commission_pct: float = 0.0,
+        slippage_pct: float = 0.0,
     ):
         # NB: deliberately does not call super().__init__ — there is no BrokerID
         # enum for the simulator and it is never placed in the BrokerRegistry.
@@ -55,6 +57,11 @@ class SimulatedBrokerAdapter(BrokerAdapter):
         self._strategy_id = strategy_id
         self._user_id = user_id
         self._starting_equity = starting_equity
+        # Cost model (mirrors BacktestEngine): adverse slippage + commission baked into the
+        # effective fill price, so paper P&L matches a backtest and previews real live costs.
+        # Default 0.0 keeps the adapter a pure mechanism; the executor injects the configured pcts.
+        self._commission_pct = commission_pct
+        self._slippage_pct = slippage_pct
         self._marks: Dict[str, float] = {}
         self._log = logger.bind(broker=_SIM_BROKER_ID, strategy_id=str(strategy_id))
 
@@ -68,10 +75,19 @@ class SimulatedBrokerAdapter(BrokerAdapter):
 
     # ── BrokerAdapter interface ──────────────────────────────────────────────────
 
+    def _effective_fill(self, base: float, side: OrderSide) -> float:
+        """Fill price with costs baked in (same model as BacktestEngine): adverse slippage then
+        commission. A BUY pays base·(1+slip)·(1+comm); a SELL receives base·(1-slip)·(1-comm).
+        Folding both into the price keeps all downstream cash/P&L accounting unchanged."""
+        if side == OrderSide.BUY:
+            return base * (1 + self._slippage_pct) * (1 + self._commission_pct)
+        return base * (1 - self._slippage_pct) * (1 - self._commission_pct)
+
     async def place_order(self, order: Order) -> OrderResult:
-        fill_price = self._marks.get(order.symbol) or order.limit_price
-        if not fill_price or fill_price <= 0:
+        base = self._marks.get(order.symbol) or order.limit_price
+        if not base or base <= 0:
             raise ValueError(f"No mark price available for {order.symbol}")
+        fill_price = self._effective_fill(base, order.side)
 
         acc = await self._get_or_create_account()
         pos = await self._repo.get_position(self._strategy_id, order.symbol)

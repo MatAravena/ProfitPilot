@@ -123,6 +123,10 @@
     },
     "stopLoss": "Stop loss %",
     "takeProfit": "Take profit %",
+    "slippage": "Deslizamiento",
+    "slippageHint": "Costo adverso de ejecución por operación (spread + impacto) — las compras se ejecutan más caras y las ventas más baratas. Por defecto 0,05% (5 pb)",
+    "positionSize": "Tamaño de posición %",
+    "positionSizeHint": "% del capital por operación — mismo dimensionamiento que en vivo, para que los resultados coincidan en magnitud (2% por defecto)",
     "none": "Ninguno"
   },
   "portfolio": {

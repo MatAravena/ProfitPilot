@@ -35,8 +35,13 @@ class StrategyService:
         instance = await self._repo.get_by_user(id, user_id)
         if instance is None:
             raise KeyError(f"Strategy {id} not found")
-        for field, value in _config_columns(cfg).items():
-            setattr(instance, field, value)
+        # Partial update: only touch fields the client actually sent. Omitted fields
+        # keep their current value; an explicit null clears a risk override. Sending
+        # the full config (the current UI) still replaces everything, as before.
+        provided = cfg.model_dump(exclude_unset=True)
+        for field in _CONFIG_FIELDS:
+            if field in provided:
+                setattr(instance, field, provided[field])
         instance.updated_at = datetime.now(timezone.utc)
         await self._repo._session.flush()
         await self._repo._session.refresh(instance)
@@ -59,17 +64,13 @@ class StrategyService:
         await self._repo.delete(instance)
 
 
+# ExecutionConfig fields map 1:1 onto StrategyInstance columns (same names). The
+# ExecutionConfig model is the single source of truth for this field set, so the list is
+# derived from it rather than hand-maintained; test_execution_config_fields_map_to_orm_columns
+# asserts every field has a matching column.
+_CONFIG_FIELDS: tuple[str, ...] = tuple(ExecutionConfig.model_fields)
+
+
 def _config_columns(cfg: ExecutionConfig) -> dict:
-    """Map an ExecutionConfig onto the StrategyInstance column names."""
-    return {
-        "size_pct": cfg.size_pct,
-        "stop_loss_pct": cfg.stop_loss_pct,
-        "take_profit_pct": cfg.take_profit_pct,
-        "max_open_positions": cfg.max_open_positions,
-        "max_daily_drawdown_pct": cfg.max_daily_drawdown_pct,
-        "max_total_drawdown_pct": cfg.max_total_drawdown_pct,
-        "max_orders_per_minute": cfg.max_orders_per_minute,
-        "allow_short": cfg.allow_short,
-        "kill_switch_enabled": cfg.kill_switch_enabled,
-        "poll_seconds": cfg.poll_seconds,
-    }
+    """Map an ExecutionConfig onto the StrategyInstance column names (used on create)."""
+    return {field: getattr(cfg, field) for field in _CONFIG_FIELDS}

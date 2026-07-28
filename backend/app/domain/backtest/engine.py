@@ -4,8 +4,10 @@ from typing import List, Optional
 
 import structlog
 
-from app.core.enums import Direction, Timeframe
+from app.core.constants import DEFAULT_WARMUP_BARS
+from app.core.enums import Timeframe
 from app.core.types import MarketData, OHLCV
+from app.domain.execution.reconcile import CLOSE, OPEN_LONG, OPEN_SHORT, plan_actions
 from app.domain.backtest.metrics import (
     BacktestMetrics, EquityPoint, PricePoint, TradeRecord, compute_metrics,
 )
@@ -49,9 +51,12 @@ class BacktestEngine:
         bars: List[OHLCV],
         initial_capital: float = 10_000.0,
         commission_pct: float = 0.001,   # 0.1% per trade side
-        warmup_bars: int = 50,
+        warmup_bars: int = DEFAULT_WARMUP_BARS,
         stop_loss_pct: Optional[float] = None,
         take_profit_pct: Optional[float] = None,
+        position_size_pct: float = 1.0,   # fraction of equity per entry; 1.0 = all-in
+        slippage_pct: float = 0.0,        # adverse fill slippage per side (spread + impact)
+        allow_short: bool = True,         # include shorts the strategy asks for (matches live gate)
     ):
         self._strategy = strategy
         self._bars = bars
@@ -60,6 +65,9 @@ class BacktestEngine:
         self._warmup_bars = warmup_bars
         self._stop_loss_pct = stop_loss_pct
         self._take_profit_pct = take_profit_pct
+        self._position_size_pct = position_size_pct
+        self._slippage_pct = slippage_pct
+        self._allow_short = allow_short
 
     async def run(self) -> BacktestResult:
         bars = self._bars
@@ -85,8 +93,10 @@ class BacktestEngine:
             if position is not None:
                 exit_price = self._exit_trigger(position, current)
                 if exit_price is not None:
-                    trade = self._close_position(position, exit_price, ts_ms)
-                    capital += position.size * exit_price * (1 - self._commission_pct)
+                    # Closing a long = sell (slip down); closing a short = buy back (slip up).
+                    fill = self._apply_slippage(exit_price, is_buy=position.side == "short")
+                    trade = self._close_position(position, fill, ts_ms)
+                    capital = self._capital_after_close(capital, position, fill)
                     trades.append(trade)
                     position = None
 
@@ -104,41 +114,25 @@ class BacktestEngine:
                 logger.error("backtest.signal.error", bar=i, error=str(exc))
                 signals = []
 
-            # Process signals — fill at next bar's open if available
+            # Process the bar's intent — fill at next bar's open if available. The intent is the
+            # last signal of the bar (matches the live executor), and the close→open action plan
+            # comes from the shared reconcile policy so a flip is a full reversal, identical to live.
             fill_price = bars[i + 1].open if i + 1 < len(bars) else current.close
 
-            for signal in signals:
-                if signal.direction == Direction.LONG and position is None:
-                    # Enter long
-                    commission = fill_price * self._commission_pct
-                    size = capital / (fill_price + commission)
-                    position = _Position(
-                        side="long",
-                        entry_price=fill_price,
-                        size=size,
-                        entry_time=ts_ms,
-                    )
-                    capital -= size * (fill_price + commission)
-
-                elif signal.direction in (Direction.SHORT, Direction.CLOSE) and position is not None:
-                    # Close existing position
-                    trade = self._close_position(position, fill_price, ts_ms)
-                    pnl = trade.pnl
-                    capital += position.size * fill_price * (1 - self._commission_pct)
-                    trades.append(trade)
-                    position = None
-
-                elif signal.direction == Direction.SHORT and position is None:
-                    # Enter short (sell first, buy back later)
-                    commission = fill_price * self._commission_pct
-                    size = capital / (fill_price + commission)
-                    position = _Position(
-                        side="short",
-                        entry_price=fill_price,
-                        size=size,
-                        entry_time=ts_ms,
-                    )
-                    capital += size * (fill_price - commission)
+            if signals:
+                intent = signals[-1].direction
+                current_side = position.side if position is not None else None
+                for action in plan_actions(intent, current_side, self._allow_short):
+                    if action == CLOSE and position is not None:
+                        # Long close = sell (slip down); short close = buy (slip up).
+                        fill = self._apply_slippage(fill_price, is_buy=position.side == "short")
+                        trades.append(self._close_position(position, fill, ts_ms))
+                        capital = self._capital_after_close(capital, position, fill)
+                        position = None
+                    elif action == OPEN_LONG:
+                        position, capital = self._open_position("long", fill_price, capital, ts_ms)
+                    elif action == OPEN_SHORT:
+                        position, capital = self._open_position("short", fill_price, capital, ts_ms)
 
             # Mark-to-market equity (cash + current market value of any open position)
             if position is None:
@@ -154,7 +148,8 @@ class BacktestEngine:
         if position is not None:
             last = bars[-1]
             ts_ms = int(last.timestamp.timestamp() * 1000)
-            trade = self._close_position(position, last.close, ts_ms)
+            fill = self._apply_slippage(last.close, is_buy=position.side == "short")
+            trade = self._close_position(position, fill, ts_ms)
             trades.append(trade)
 
         bars_per_year = self._infer_bars_per_year(self._strategy.timeframe)
@@ -194,6 +189,40 @@ class BacktestEngine:
             if tp is not None and bar.low <= pos.entry_price * (1 - tp):
                 return pos.entry_price * (1 - tp)
         return None
+
+    def _open_position(self, side: str, fill_price: float, capital: float, ts_ms: int):
+        """Open a long/short sized at equity × position_size_pct, with adverse slippage +
+        commission baked into the entry price. Returns (position, new_capital)."""
+        is_long = side == "long"
+        entry = self._apply_slippage(fill_price, is_buy=is_long)   # buy slips up, sell slips down
+        commission = entry * self._commission_pct
+        notional = capital * self._position_size_pct
+        size = notional / (entry + commission)
+        position = _Position(side=side, entry_price=entry, size=size, entry_time=ts_ms)
+        if is_long:
+            capital -= size * (entry + commission)
+        else:
+            capital += size * (entry - commission)   # short receives proceeds on entry
+        return position, capital
+
+    def _apply_slippage(self, price: float, *, is_buy: bool) -> float:
+        """Adverse slippage on a market fill: buys fill higher, sells fill lower — modeling the
+        half-spread crossed plus market impact. Symmetric per side; 0.0 disables it."""
+        if is_buy:
+            return price * (1 + self._slippage_pct)
+        return price * (1 - self._slippage_pct)
+
+    def _capital_after_close(self, capital: float, pos: _Position, price: float) -> float:
+        """Cash balance after flattening a position at ``price``.
+
+        Long close = sell the units → receive proceeds net of commission.
+        Short close = buy the units back → pay the buyback cost plus commission.
+        (The mirror of the entry accounting; a short's proceeds were already added
+        to cash on entry, so covering must subtract the buyback here.)
+        """
+        if pos.side == "long":
+            return capital + pos.size * price * (1 - self._commission_pct)
+        return capital - pos.size * price * (1 + self._commission_pct)
 
     def _close_position(self, pos: _Position, price: float, ts_ms: int) -> TradeRecord:
         entry_commission = pos.entry_price * self._commission_pct

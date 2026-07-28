@@ -255,7 +255,7 @@ export function Builder() {
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <MetricCard label={t('builder.metrics.trades')} value={String(m.total_trades)} positive={true} icon={BarChart2} />
-                <MetricCard label={t('builder.metrics.profitFactor')} value={m.profit_factor === Infinity ? '∞' : m.profit_factor.toFixed(2)} positive={m.profit_factor >= 1} icon={TrendingUp} />
+                <MetricCard label={t('builder.metrics.profitFactor')} value={m.profit_factor == null ? '∞' : m.profit_factor.toFixed(2)} positive={m.profit_factor == null || m.profit_factor >= 1} icon={TrendingUp} />
               </div>
             </>
           )}

@@ -70,10 +70,15 @@ class TestComputeMetrics:
         m = compute_metrics(_equity([10_000, 10_100]), trades, initial_capital=10_000)
         assert m.profit_factor == pytest.approx(2.0)
 
-    def test_profit_factor_infinite_when_no_losses(self):
+    def test_profit_factor_is_none_when_no_losses(self):
+        # Must be None, not float("inf"): inf is not JSON-compliant and would 500 the
+        # backtest/sandbox response (Starlette serializes with allow_nan=False).
+        import json
         trades = [_trade(100)]
         m = compute_metrics(_equity([10_000, 10_100]), trades, initial_capital=10_000)
-        assert m.profit_factor == float("inf")
+        assert m.profit_factor is None
+        # The whole metrics payload must be strictly JSON-serializable (no inf/nan).
+        json.dumps(m._asdict(), allow_nan=False)
 
     def test_avg_win_and_avg_loss(self):
         trades = [_trade(100), _trade(200), _trade(-50), _trade(-150)]

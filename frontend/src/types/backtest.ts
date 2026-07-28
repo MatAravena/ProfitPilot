@@ -8,8 +8,10 @@ export interface BacktestRequest {
   end?: string
   initial_capital: number
   commission_pct: number
+  slippage_pct?: number   // adverse slippage per fill (spread + impact); default 5 bps
   stop_loss_pct?: number | null
   take_profit_pct?: number | null
+  position_size_pct?: number | null   // fraction of equity per entry (same model as live); null → backend 2% default
   parameters: Record<string, unknown>
 }
 
@@ -18,7 +20,7 @@ export interface BacktestMetrics {
   sharpe_ratio: number
   max_drawdown_pct: number
   win_rate: number
-  profit_factor: number
+  profit_factor: number | null   // null = no losing trades (rendered as "∞")
   total_trades: number
   winning_trades: number
   losing_trades: number

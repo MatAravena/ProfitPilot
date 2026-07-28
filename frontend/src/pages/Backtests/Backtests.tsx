@@ -29,6 +29,8 @@ export function Backtests() {
     timeframe: '1d',
     initial_capital: 10000,
     commission_pct: 0.001,
+    slippage_pct: 0.0005,       // conservative 5 bps adverse slippage per fill
+    position_size_pct: 0.02,   // same risk model as live (2% default); keeps backtest ≈ live magnitude
     parameters: {},
   })
   const [selectValue, setSelectValue] = useState('')
@@ -203,8 +205,8 @@ export function Backtests() {
             <div className="flex flex-col gap-1.5">
               <label className="text-xs text-text-muted font-medium">{t('backtests.initialCapital')}</label>
               <input
-                type="number" min={100} value={form.initial_capital}
-                onChange={(e) => setForm((f) => ({ ...f, initial_capital: parseFloat(e.target.value) }))}
+                type="number" min={100} value={Number.isNaN(form.initial_capital) ? '' : form.initial_capital}
+                onChange={(e) => { const n = parseFloat(e.target.value); setForm((f) => ({ ...f, initial_capital: Number.isNaN(n) ? 0 : n })) }}
                 className="bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
               />
             </div>
@@ -221,6 +223,20 @@ export function Backtests() {
               />
               <span className="text-[10px] text-text-muted">{t('backtests.commissionHint')}</span>
             </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs text-text-muted font-medium">
+              {t('backtests.slippage')} <span className="text-text-muted/60">{t('backtests.commissionSub')}</span>
+            </label>
+            <input
+              type="number" step={0.01} min={0}
+              value={+((form.slippage_pct ?? 0) * 100).toFixed(4)}
+              onChange={(e) => setForm((f) => ({ ...f, slippage_pct: parseFloat(e.target.value) / 100 || 0 }))}
+              className="bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              placeholder="e.g. 0.05"
+            />
+            <span className="text-[10px] text-text-muted">{t('backtests.slippageHint')}</span>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -252,6 +268,22 @@ export function Backtests() {
                 className="bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
               />
             </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs text-text-muted font-medium">{t('backtests.positionSize')}</label>
+            <input
+              type="text" inputMode="decimal"
+              value={form.position_size_pct != null ? String(+(form.position_size_pct * 100).toFixed(4)) : ''}
+              placeholder="2"
+              onChange={(e) => {
+                const raw = e.target.value
+                const n = raw === '' || Number.isNaN(Number(raw)) ? null : Number(raw) / 100
+                setForm((f) => ({ ...f, position_size_pct: n }))
+              }}
+              className="bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+            <span className="text-[10px] text-text-muted">{t('backtests.positionSizeHint')}</span>
           </div>
 
           {params.length > 0 && (
@@ -317,9 +349,9 @@ export function Backtests() {
               <div className="grid grid-cols-4 gap-3">
                 <MetricCard label={t('backtests.metrics.totalTrades')} 
                   value={String(m.total_trades)} positive={true} icon={BarChart2} />
-                <MetricCard label={t('backtests.metrics.profitFactor')} 
-                  value={m.profit_factor === Infinity ? '∞' : (m.profit_factor.toFixed(2) ?? null) }
-                  positive={m.profit_factor >= 1} icon={TrendingUp} />
+                <MetricCard label={t('backtests.metrics.profitFactor')}
+                  value={m.profit_factor == null ? '∞' : m.profit_factor.toFixed(2)}
+                  positive={m.profit_factor == null || m.profit_factor >= 1} icon={TrendingUp} />
                 <MetricCard label={t('backtests.metrics.avgWin')} value={formatCurrency(m.avg_win)} positive={true} icon={TrendingUp} />
                 <MetricCard label={t('backtests.metrics.avgLoss')} value={formatCurrency(m.avg_loss)} positive={false} icon={TrendingDown} />
               </div>

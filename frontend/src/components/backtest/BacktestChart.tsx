@@ -1,10 +1,11 @@
 import { useEffect, useRef } from 'react'
 import {
   createChart, ColorType, CrosshairMode,
-  type IChartApi, type ISeriesApi, type UTCTimestamp,
+  type IChartApi, type ISeriesApi,
 } from 'lightweight-charts'
 import type { PricePoint, TradeRecord } from '@/types/backtest'
 import { buildTradeMarkers } from '@/lib/tradeMarkers'
+import { toSeriesData } from '@/lib/chartSeries'
 
 interface Props {
   prices: PricePoint[]
@@ -58,10 +59,9 @@ export function BacktestChart({ prices, trades, height = 280 }: Props) {
   useEffect(() => {
     const series = seriesRef.current
     if (!series) return
-    series.setData(prices.map((p) => ({
-      time: Math.floor(p.timestamp / 1000) as UTCTimestamp,
-      value: p.close,
-    })))
+    // Lightweight Charts requires strictly-ascending, UNIQUE times; normalise (sort + dedupe)
+    // before setData or it throws "data must be asc ordered by time" and unmounts the chart.
+    series.setData(toSeriesData(prices))
     series.setMarkers(buildTradeMarkers(trades))
     chartRef.current?.timeScale().fitContent()
   }, [prices, trades])

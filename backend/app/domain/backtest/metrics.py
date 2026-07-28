@@ -1,6 +1,6 @@
 from __future__ import annotations
 import math
-from typing import List, NamedTuple
+from typing import List, NamedTuple, Optional
 
 
 class PricePoint(NamedTuple):
@@ -30,7 +30,7 @@ class BacktestMetrics(NamedTuple):
     sharpe_ratio: float
     max_drawdown_pct: float
     win_rate: float
-    profit_factor: float
+    profit_factor: Optional[float]   # None = no losing trades (undefined / "infinite")
     total_trades: int
     winning_trades: int
     losing_trades: int
@@ -86,14 +86,16 @@ def compute_metrics(
 
     gross_profit = sum(t.pnl for t in wins)
     gross_loss = abs(sum(t.pnl for t in losses))
-    profit_factor = gross_profit / gross_loss if gross_loss > 0 else float("inf")
+    # None (not inf) when there are no losses: inf is not JSON-compliant and would 500 the
+    # response (Starlette serializes with allow_nan=False). The frontend renders None as "∞".
+    profit_factor = round(gross_profit / gross_loss, 2) if gross_loss > 0 else None
 
     return BacktestMetrics(
         total_return_pct=round(total_return_pct, 2),
         sharpe_ratio=round(sharpe, 3),
         max_drawdown_pct=round(max_dd, 2),
         win_rate=round(win_rate, 1),
-        profit_factor=round(profit_factor, 2),
+        profit_factor=profit_factor,   # already rounded above; None when no losses
         total_trades=len(trades),
         winning_trades=len(wins),
         losing_trades=len(losses),

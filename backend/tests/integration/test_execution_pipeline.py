@@ -340,14 +340,23 @@ async def test_create_and_update_execution_config(db):
         assert rc.max_open_positions == 3                        # strategy override
         assert rc.max_total_drawdown_pct == pytest.approx(0.10)  # inherited from profile
 
-        # Update replaces the config.
+        # Partial update: only the provided fields change; others are preserved.
         updated = await svc.update_config(
             new_id, user_id, ExecutionConfig(size_pct=0.01, allow_short=True)
         )
         await session.commit()
         assert updated.size_pct == pytest.approx(0.01)
         assert updated.allow_short is True
-        assert updated.stop_loss_pct is None    # override cleared → inherit profile again
+        assert updated.stop_loss_pct == pytest.approx(0.02)   # preserved (not in the request)
+        assert updated.max_open_positions == 3                # preserved (not in the request)
+
+        # An explicit null clears a risk override (revert to profile inherit).
+        cleared = await svc.update_config(
+            new_id, user_id, ExecutionConfig(stop_loss_pct=None)
+        )
+        await session.commit()
+        assert cleared.stop_loss_pct is None
+        assert cleared.size_pct == pytest.approx(0.01)         # untouched by this PATCH
 
 
 def _fake_instance(strat_id, user_id, **overrides):

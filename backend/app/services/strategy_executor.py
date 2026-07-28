@@ -379,6 +379,9 @@ class StrategyExecutor:
             adapter = SimulatedBrokerAdapter(
                 session=session, strategy_id=strategy_id, user_id=user_id,
                 starting_equity=settings.SIM_STARTING_EQUITY, market_type=market_type,
+                # Inject realistic costs so paper ≈ backtest ≈ live (adapter itself defaults to 0).
+                commission_pct=settings.SIM_COMMISSION_PCT,
+                slippage_pct=settings.SIM_SLIPPAGE_PCT,
             )
             return adapter, "sim"
 

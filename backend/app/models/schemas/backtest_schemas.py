@@ -15,6 +15,13 @@ class BacktestRequest(BaseModel):
     end: Optional[datetime] = None
     initial_capital: float = Field(10_000.0, gt=0)
     commission_pct: float = Field(0.001, ge=0)
+    # Adverse slippage per fill (spread + impact): buys fill higher, sells lower. Defaults to a
+    # conservative 5 bps so backtests aren't optimistically frictionless. 0 = no slippage.
+    slippage_pct: float = Field(0.0005, ge=0, le=0.1)
+    # Fraction of equity risked per entry — the SAME risk model the live executor uses, so the
+    # backtest curve reflects live magnitude. None → the service applies the live default (2%).
+    # Pre-filled from the user's risk profile on the form (like SL/TP).
+    position_size_pct: Optional[float] = Field(None, gt=0, le=1)
     # Optional risk exits for the run — arrangeable per backtest (pre-filled from the user's
     # risk profile on the form). None = no stop / no target.
     stop_loss_pct: Optional[float] = Field(None, gt=0, le=1)
@@ -44,7 +51,7 @@ class BacktestMetricsResponse(BaseModel):
     sharpe_ratio: float
     max_drawdown_pct: float
     win_rate: float
-    profit_factor: float
+    profit_factor: Optional[float] = None   # None = no losing trades (rendered as "∞")
     total_trades: int
     winning_trades: int
     losing_trades: int

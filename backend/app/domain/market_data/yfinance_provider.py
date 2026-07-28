@@ -5,6 +5,7 @@ from typing import List, Optional
 
 import structlog
 
+from app.core.datetime_utils import to_naive_utc
 from app.core.enums import Timeframe
 from app.core.types import OHLCV
 
@@ -116,7 +117,11 @@ async def fetch_ohlcv(
         for ts, row in hist.iterrows():
             try:
                 rows.append({
-                    "ts": ts.to_pydatetime().replace(tzinfo=None),
+                    # yfinance returns tz-AWARE timestamps (intraday bars localized to a market
+                    # tz). to_naive_utc converts to UTC *then* strips tz — a bare .replace(tzinfo
+                    # =None) would keep local wall-clock time, which around a DST boundary collapses
+                    # two instants onto the same hour → duplicate/non-monotonic bars downstream.
+                    "ts": to_naive_utc(ts.to_pydatetime()),
                     "open": float(row["Open"]),
                     "high": float(row["High"]),
                     "low": float(row["Low"]),

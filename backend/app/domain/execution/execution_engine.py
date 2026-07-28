@@ -30,6 +30,7 @@ from app.core.types import (
 )
 from app.domain.broker.base import BrokerAdapter
 from app.domain.execution import position_sizer
+from app.domain.execution.reconcile import CLOSE, OPEN_LONG, OPEN_SHORT, plan_actions
 from app.domain.risk.risk_manager import RiskManager
 
 logger = structlog.get_logger(__name__)
@@ -89,41 +90,47 @@ class ExecutionEngine:
 
         held = position is not None and position.quantity != 0
         held_long = held and position.quantity > 0
+        current_side = "long" if held_long else ("short" if held else None)
 
-        # 3. CLOSE / NEUTRAL — flatten if in a position, else nothing.
-        # NOTE: NEUTRAL is treated as an explicit "go flat" (synonym for CLOSE), by design —
-        # a strategy that wants to hold should return no signal, not NEUTRAL.
-        if intent in (Direction.CLOSE, Direction.NEUTRAL):
+        # 3. Decide the close→open plan from the shared reconcile policy — the SAME decision the
+        # backtest engine uses, so a strategy trades identically live and in backtest.
+        # NOTE: NEUTRAL == "go flat" (synonym for CLOSE), by design — a strategy that wants to
+        # hold should return no signal, not NEUTRAL.
+        actions = plan_actions(intent, current_side, allow_short)
+
+        # Empty plan → a no-op; the reason explains which no-op it is.
+        if not actions:
             if held:
-                return [await self._close(
-                    strategy_id, symbol, broker_id, adapter, account,
-                    position, risk_cfg, latest_close, signal_id, reason="signal_close"
-                )]
-            return [ExecutionOutcome(action=ACTION_NOOP, reason="flat, no action")]
+                reason = "already in position"
+            elif intent in (Direction.CLOSE, Direction.NEUTRAL):
+                reason = "flat, no action"
+            else:
+                reason = "shorting disabled"   # flat + directional-short suppressed
+            return [ExecutionOutcome(action=ACTION_NOOP, reason=reason)]
 
-        # 4. Directional intent.
-        want_long = intent == Direction.LONG
-        if held and (held_long == want_long):
-            return [ExecutionOutcome(action=ACTION_NOOP, reason="already in position")]
-
+        # A close alongside a directional intent is a reversal; a plain CLOSE/NEUTRAL is not.
+        directional = intent not in (Direction.CLOSE, Direction.NEUTRAL)
+        opened = False
         outcomes: List[ExecutionOutcome] = []
+        for action in actions:
+            if action == CLOSE:
+                outcomes.append(await self._close(
+                    strategy_id, symbol, broker_id, adapter, account,
+                    position, risk_cfg, latest_close, signal_id,
+                    reason="reversal" if directional else "signal_close",
+                ))
+                position = None
+            else:  # OPEN_LONG / OPEN_SHORT
+                opened = True
+                outcomes.append(await self._open(
+                    strategy_id, symbol, broker_id, adapter, account,
+                    risk_cfg, latest_close, signal_id, want_long=(action == OPEN_LONG),
+                ))
 
-        # Opposite position open → close it first (reversal).
-        if held:
-            outcomes.append(await self._close(
-                strategy_id, symbol, broker_id, adapter, account,
-                position, risk_cfg, latest_close, signal_id, reason="reversal"
-            ))
-            position = None
-
-        if not want_long and not allow_short:
+        # Reversal whose opposite open was suppressed (short intent, shorting disabled): keep the
+        # explicit "shorting disabled" no-op alongside the reversal close.
+        if directional and intent == Direction.SHORT and not allow_short and not opened:
             outcomes.append(ExecutionOutcome(action=ACTION_NOOP, reason="shorting disabled"))
-            return outcomes
-
-        outcomes.append(await self._open(
-            strategy_id, symbol, broker_id, adapter, account,
-            risk_cfg, latest_close, signal_id, want_long
-        ))
         return outcomes
 
     # ── Internals ────────────────────────────────────────────────────────────────
