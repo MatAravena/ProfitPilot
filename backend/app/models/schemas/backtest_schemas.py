@@ -1,6 +1,6 @@
 from __future__ import annotations
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -79,6 +79,54 @@ class BacktestResponse(BaseModel):
     equity_curve: List[EquityPointResponse]
     trades: List[TradeRecordResponse]
     prices: List[PricePointResponse]
+
+
+class MonteCarloRequest(BacktestRequest):
+    """A backtest request plus resampling controls. Reuses every BacktestRequest field
+    (same strategy/symbol/timeframe/dates/costs/sizing) so MC stresses the exact run the
+    ordinary backtest would produce — no separate execution assumptions."""
+    n_simulations: int = Field(5_000, ge=100, le=50_000)
+    methods: List[Literal["bootstrap", "shuffle"]] = Field(default_factory=lambda: ["bootstrap", "shuffle"])
+    seed: Optional[int] = Field(None, description="Set for deterministic (reproducible) runs.")
+
+
+class PercentileStatsResponse(BaseModel):
+    p5: float
+    p25: float
+    p50: float
+    p75: float
+    p95: float
+    min: float
+    max: float
+    mean: float
+
+
+class HistogramResponse(BaseModel):
+    edges: List[float]   # len == counts + 1
+    counts: List[int]
+
+
+class MonteCarloMethodResponse(BaseModel):
+    method: str
+    final_equity: PercentileStatsResponse
+    total_return_pct: PercentileStatsResponse
+    max_drawdown_pct: PercentileStatsResponse
+    prob_profit: float
+    risk_of_exceeding_drawdown: float
+    risk_of_ruin: float
+    histogram: HistogramResponse
+
+
+class MonteCarloResponse(BaseModel):
+    strategy_name: str
+    symbol: str
+    timeframe: str
+    initial_capital: float
+    n_simulations: int
+    n_trades: int
+    realized_total_return_pct: float
+    drawdown_threshold_pct: float
+    methods: Dict[str, MonteCarloMethodResponse]
 
 
 class StrategyParamDef(BaseModel):

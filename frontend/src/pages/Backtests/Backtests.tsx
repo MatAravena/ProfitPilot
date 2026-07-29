@@ -1,17 +1,18 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { Play, TrendingUp, TrendingDown, Activity, BarChart2, Award, AlertTriangle } from 'lucide-react'
+import { Play, TrendingUp, TrendingDown, Activity, BarChart2, Award, AlertTriangle, Dices } from 'lucide-react'
 import { api } from '@/lib/api'
 import { friendlyError } from '@/lib/errors'
 import { useToastStore } from '@/stores/toast'
-import type { BacktestRequest, BacktestResponse, BacktestMetrics, StrategyMeta } from '@/types/backtest'
+import type { BacktestRequest, BacktestResponse, BacktestMetrics, StrategyMeta, MonteCarloResponse } from '@/types/backtest'
 import type { StrategyInstance } from '@/types'
 import { formatCurrency, formatPercent } from '@/lib/utils'
 import { EquityChart } from '@/components/charts/EquityChart'
 import { MetricCard } from '@/components/backtest/MetricCard'
 import { TradeTable } from '@/components/backtest/TradeTable'
 import { BacktestChart } from '@/components/backtest/BacktestChart'
+import { MonteCarloPanel } from '@/components/backtest/MonteCarloPanel'
 
 const TIMEFRAMES = ['1m', '5m', '15m', '1h', '4h', '1d'] as const
 const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT']
@@ -37,6 +38,9 @@ export function Backtests() {
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0])
   const [result, setResult] = useState<BacktestResponse | null>(null)
+  // The exact request that produced `result`, so Monte Carlo stresses the identical run.
+  const [lastReq, setLastReq] = useState<BacktestRequest | null>(null)
+  const [mcResult, setMcResult] = useState<MonteCarloResponse | null>(null)
 
   const { data: available } = useQuery({
     queryKey: ['backtests', 'strategies'],
@@ -53,6 +57,14 @@ export function Backtests() {
   const run = useMutation({
     mutationFn: (req: BacktestRequest) => api.backtests.run(req),
     onSuccess: (data) => setResult(data),
+    onError: (err) => toastError(err),
+  })
+
+  // Monte Carlo is opt-in — it re-runs the backtest server-side, so we don't fold its
+  // latency into every ordinary run.
+  const montecarlo = useMutation({
+    mutationFn: () => api.backtests.montecarlo({ ...(lastReq as BacktestRequest), n_simulations: 5000 }),
+    onSuccess: (data) => setMcResult(data),
     onError: (err) => toastError(err),
   })
 
@@ -105,11 +117,14 @@ export function Backtests() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setResult(null)
-    run.mutate({
+    setMcResult(null)   // a fresh backtest invalidates the previous MC run
+    const req: BacktestRequest = {
       ...form,
       start: startDate ? new Date(startDate).toISOString() : undefined,
       end: endDate ? new Date(endDate).toISOString() : undefined,
-    })
+    }
+    setLastReq(req)
+    run.mutate(req)
   }
 
   const activeMeta = available?.strategies.find((s) => s.class_name === form.strategy_name)
@@ -383,6 +398,21 @@ export function Backtests() {
               </div>
 
               <TradeTable trades={result.trades} />
+
+              {/* Monte Carlo — opt-in stress test of this result's trade sequence. */}
+              {mcResult ? (
+                <MonteCarloPanel result={mcResult} />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => montecarlo.mutate()}
+                  disabled={montecarlo.isPending || !lastReq}
+                  className="flex items-center justify-center gap-2 self-start bg-surface border border-border rounded-lg px-4 py-2.5 text-sm font-medium hover:border-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  <Dices size={14} />
+                  {montecarlo.isPending ? t('backtests.montecarlo.running') : t('backtests.montecarlo.run')}
+                </button>
+              )}
             </>
           )}
         </div>

@@ -17,6 +17,8 @@ import type {
 import type {
   BacktestRequest,
   BacktestResponse,
+  MonteCarloRequest,
+  MonteCarloResponse,
   PortfolioSummary,
   AvailableStrategiesResponse,
 } from '@/types/backtest'
@@ -141,6 +143,8 @@ export const api = {
     strategies: () => request<AvailableStrategiesResponse>('/backtests/strategies'),
     run: (body: BacktestRequest) =>
       request<BacktestResponse>('/backtests/run', { method: 'POST', body: JSON.stringify(body) }),
+    montecarlo: (body: MonteCarloRequest) =>
+      request<MonteCarloResponse>('/backtests/montecarlo', { method: 'POST', body: JSON.stringify(body) }),
   },
 
   builder: {

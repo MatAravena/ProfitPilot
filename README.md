@@ -19,7 +19,7 @@ Algorithmic trading platform with ML forecasting, multi-broker execution, and an
 - **Backtesting** — run any registered strategy against Yahoo Finance / Bybit historical data, see equity curve, trade markers, and full performance metrics (Sharpe, max drawdown, win rate, profit factor). Positions are sized with the **same risk model as live trading** (`position_size_pct`, default 2%), so a backtest's equity curve reflects the magnitude the strategy would actually trade live — not an all-in curve that overstates returns. Fills carry realistic costs: flat **commission** plus **adverse slippage** (`slippage_pct`, default 5 bps — buys fill higher, sells lower), so results aren't optimistically frictionless
 - **Strategy system** — built-in SMA crossover, RSI mean reversion, MACD, Bollinger Bands; user-defined strategies auto-loaded from `backend/user_strategies/`
 - **AI Strategy Builder** — describe a strategy in plain English, generate Python code via Claude, run a sandbox backtest — all in the browser
-- **Live/paper trade pipeline** — one executor loop per active strategy runs the full chain: `signal → position sizing → RiskManager veto → broker → fill → persistence`. Paper trading uses a built-in `SimulatedBrokerAdapter` with a durable virtual ledger (zero broker setup); live uses a real broker connection. Signals and every order attempt are persisted; orders broadcast over WebSocket
+- **Live/paper trade pipeline** — one executor loop per active strategy runs the full chain: `signal → position sizing → RiskManager veto → broker → fill → persistence`. Paper trading uses a built-in `SimulatedBrokerAdapter` with a durable virtual ledger (zero broker setup) that charges the **same commission + slippage as the backtest**, and shares the backtest's exact intent→action logic (open / close / full reversal); live uses a real broker connection. Signals and every order attempt are persisted; orders broadcast over WebSocket. The full paper lifecycle is covered by an **end-to-end test** (see How It Works below)
 - **Risk profile + per-strategy overrides** — a per-user risk profile (SL/TP, drawdown limits, max positions, order rate, kill switch) sets the defaults, edited in Settings; each strategy carries behavioral config (position size, `allow_short`, poll) plus **optional risk overrides** (blank = inherit the profile). Editing a strategy's config restarts only that bot (live-adapts); changing the profile only refreshes form defaults, never running bots. Backtests take arrangeable SL/TP **and position size %** per run (position size defaults to the live 2%, so backtest ≈ live)
 - **Loop-managed stops + new-bar gating** — stop-loss / take-profit are checked every poll and never blocked by the risk veto; signals regenerate only once per closed bar
 - **Restart-safe** — positions, peak equity, open-position count, and today's realized P&L are rehydrated from persisted state on boot
@@ -92,6 +92,11 @@ signal → position sizing (equity × size%) → RiskManager veto (hard, cannot 
 - Signals and **every order attempt** are persisted; the frontend strategy page renders them live.
 - **Restart-safe**: positions, peak equity, open-position count, and today's realized P&L are
   rehydrated on boot.
+- **Verified end-to-end**: an integration test drives the real executor through a full paper
+  lifecycle (entry → reversal → close) and asserts the exact data the strategy page consumes — the
+  `/strategies/{id}/orders` and `/signals` responses plus the `strategy.order` / `strategy.signal`
+  WebSocket stream — so the whole chain (create → poll → risk → simulated fill with costs → persist →
+  broadcast → read back) is known to work, not just assumed.
 
 _Could be improved:_ "live data" is currently **repeated polling** of recent bars, not a true tick
 stream (`stream_ticks()` is unimplemented); live broker fill-confirmation (real fill price/commission)
@@ -99,12 +104,29 @@ is reconciled on the next poll rather than captured immediately. The one remaini
 backtest↔live difference is fill *timing* (backtest fills next-bar open, live fills at the just-closed
 bar) — negligible for 24/7 crypto, and the honest choice for daily bars.
 
+### Monte Carlo — is the result edge or luck?
+
+A single backtest is one path through history — one *ordering* of one *sample* of trades. From the
+**Backtests** page you can opt into a Monte Carlo run (`POST /api/v1/backtests/montecarlo`) that
+re-runs the backtest and then resamples its realized trade sequence into a distribution of outcomes:
+
+- **Bootstrap** (sampling risk) draws trades *with replacement* — "were these results luck?"
+- **Shuffle** (ordering risk) permutes the same trades — final equity is order-invariant, but the
+  drawdown *path* is not, so this isolates "was my drawdown just a lucky order?"
+
+Both resample the **fixed-fractional per-trade return series** (`r_i = pnl_i / equity_before_trade_i`),
+which matches this platform's fixed-% sizing — compounding the trades in their original order
+reproduces the realized final equity, so the resampling is self-consistent. The panel reports
+percentiles of total return and max-drawdown, probability of profit, and risk of ruin, with the
+realized single-path result drawn as a reference line. It's pure vectorized numpy (no persistence);
+5k simulations run in well under a second.
+
 ### What this means for you (user side)
 
 - A good backtest is **necessary, not sufficient.** Keep `slippage_pct`, commission, and
   `position_size_pct` realistic for your asset — a strategy that only works at zero cost is fragile.
 - **Validate out-of-sample.** One great backtest can be luck or overfitting; test on data you didn't
-  tune on.
+  tune on — and run **Monte Carlo** to see how much of the result survives resampling the trades.
 - **Always run paper before live**, and expect live results to sit *inside* the backtest's range, not
   exactly on its line.
 - Write strategies that **only look at past bars** — the engine won't hand you the future, so don't
@@ -371,10 +393,11 @@ class MyBrokerAdapter(BrokerAdapter):
 - [x] FastAPI backend with layered architecture
 - [x] Strategy engine with built-in strategies + user-defined auto-loading
 - [x] Backtesting — equity curve, trade chart, performance metrics
+- [x] Monte Carlo robustness — resample a backtest's trade sequence (bootstrap + shuffle) into a distribution of outcomes; separates edge from luck
 - [x] Yahoo Finance + Bybit data providers with OHLCV caching
 - [x] AI Strategy Builder (Monaco + Claude + sandbox execution)
 - [x] Live/paper strategy executor with WebSocket signals
-- [x] Full trade pipeline: sizing → RiskManager → broker → fill → persistence (paper via built-in simulator)
+- [x] Full trade pipeline: sizing → RiskManager → broker → fill → persistence (paper via built-in simulator); paper models the same commission + slippage as the backtest and is verified end-to-end
 - [x] Per-strategy risk/execution config (live-editable), loop-managed stops, new-bar gating, restart rehydration
 - [x] Broker adapters: Alpaca, Bybit, Binance; live path covered by tests (fake adapter)
 - [x] React frontend — 6 pages wired to backend; per-strategy config form on the Strategies page

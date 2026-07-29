@@ -62,6 +62,53 @@ export interface BacktestResponse {
   prices: PricePoint[]
 }
 
+export interface MonteCarloRequest extends BacktestRequest {
+  n_simulations?: number
+  methods?: MonteCarloMethod[]
+  seed?: number | null
+}
+
+export type MonteCarloMethod = 'bootstrap' | 'shuffle'
+
+export interface PercentileStats {
+  p5: number
+  p25: number
+  p50: number
+  p75: number
+  p95: number
+  min: number
+  max: number
+  mean: number
+}
+
+export interface MonteCarloHistogram {
+  edges: number[]   // length === counts.length + 1
+  counts: number[]
+}
+
+export interface MonteCarloMethodResult {
+  method: string
+  final_equity: PercentileStats
+  total_return_pct: PercentileStats
+  max_drawdown_pct: PercentileStats
+  prob_profit: number                  // fraction of sims ending above initial capital
+  risk_of_exceeding_drawdown: number   // fraction whose max-drawdown exceeds the threshold
+  risk_of_ruin: number                 // fraction that hit equity <= 0
+  histogram: MonteCarloHistogram
+}
+
+export interface MonteCarloResponse {
+  strategy_name: string
+  symbol: string
+  timeframe: string
+  initial_capital: number
+  n_simulations: number
+  n_trades: number
+  realized_total_return_pct: number   // the single-path backtest result, for reference lines
+  drawdown_threshold_pct: number
+  methods: Record<string, MonteCarloMethodResult>
+}
+
 export interface StrategyParamDef {
   key: string
   type: 'int' | 'float' | string

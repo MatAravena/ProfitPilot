@@ -132,7 +132,31 @@
     "slippageHint": "Adverse fill cost per trade (spread + impact) — buys fill higher, sells lower. Default 0.05% (5 bps)",
     "positionSize": "Position size %",
     "positionSizeHint": "% of equity per trade — same sizing as live, so results match live magnitude (default 2%)",
-    "none": "None"
+    "none": "None",
+    "montecarlo": {
+      "title": "Monte Carlo",
+      "subtitle": "{{sims}} simulations · {{trades}} trades",
+      "run": "Run Monte Carlo",
+      "running": "Simulating…",
+      "hint": "Resample this backtest's trades to see how much of the result is edge vs. luck.",
+      "method": {
+        "bootstrap": "Bootstrap",
+        "shuffle": "Shuffle"
+      },
+      "desc": {
+        "bootstrap": "Sampling risk — draws trades with replacement to ask \"were these results luck?\"",
+        "shuffle": "Ordering risk — reshuffles the same trades to ask \"was my drawdown just a lucky order?\""
+      },
+      "medianReturn": "Median return",
+      "p5Return": "5th-pct return (1-in-20)",
+      "medianDrawdown": "Median max drawdown",
+      "p95Drawdown": "95th-pct max drawdown",
+      "probProfit": "Probability of profit",
+      "histogramTitle": "Distribution of total return %",
+      "realized": "Realized",
+      "simsLabel": "Simulations",
+      "ruinWarning": "Risk of ruin: {{pct}} of simulations wiped out the account."
+    }
   },
   "portfolio": {
     "kpis": {

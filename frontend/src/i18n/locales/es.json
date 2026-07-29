@@ -127,7 +127,31 @@
     "slippageHint": "Costo adverso de ejecución por operación (spread + impacto) — las compras se ejecutan más caras y las ventas más baratas. Por defecto 0,05% (5 pb)",
     "positionSize": "Tamaño de posición %",
     "positionSizeHint": "% del capital por operación — mismo dimensionamiento que en vivo, para que los resultados coincidan en magnitud (2% por defecto)",
-    "none": "Ninguno"
+    "none": "Ninguno",
+    "montecarlo": {
+      "title": "Monte Carlo",
+      "subtitle": "{{sims}} simulaciones · {{trades}} operaciones",
+      "run": "Ejecutar Monte Carlo",
+      "running": "Simulando…",
+      "hint": "Remuestrea las operaciones de este backtest para ver cuánto del resultado es ventaja real y cuánto es suerte.",
+      "method": {
+        "bootstrap": "Bootstrap",
+        "shuffle": "Barajado"
+      },
+      "desc": {
+        "bootstrap": "Riesgo de muestreo — extrae operaciones con reemplazo para preguntar \"¿fueron estos resultados suerte?\"",
+        "shuffle": "Riesgo de orden — reordena las mismas operaciones para preguntar \"¿fue mi caída solo un orden afortunado?\""
+      },
+      "medianReturn": "Retorno mediano",
+      "p5Return": "Retorno percentil 5 (1 de 20)",
+      "medianDrawdown": "Caída máx. mediana",
+      "p95Drawdown": "Caída máx. percentil 95",
+      "probProfit": "Probabilidad de ganancia",
+      "histogramTitle": "Distribución del retorno total %",
+      "realized": "Realizado",
+      "simsLabel": "Simulaciones",
+      "ruinWarning": "Riesgo de ruina: {{pct}} de las simulaciones liquidaron la cuenta."
+    }
   },
   "portfolio": {
     "kpis": {
