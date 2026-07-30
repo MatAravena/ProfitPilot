@@ -5,7 +5,7 @@ import { Play, TrendingUp, TrendingDown, Activity, BarChart2, Award, AlertTriang
 import { api } from '@/lib/api'
 import { friendlyError } from '@/lib/errors'
 import { useToastStore } from '@/stores/toast'
-import type { BacktestRequest, BacktestResponse, BacktestMetrics, StrategyMeta, MonteCarloResponse } from '@/types/backtest'
+import type { BacktestRequest, BacktestResponse, BacktestMetrics, StrategyMeta, MonteCarloResponse, DcaCompareResponse } from '@/types/backtest'
 import type { StrategyInstance } from '@/types'
 import { formatCurrency, formatPercent } from '@/lib/utils'
 import { EquityChart } from '@/components/charts/EquityChart'
@@ -13,6 +13,7 @@ import { MetricCard } from '@/components/backtest/MetricCard'
 import { TradeTable } from '@/components/backtest/TradeTable'
 import { BacktestChart } from '@/components/backtest/BacktestChart'
 import { MonteCarloPanel } from '@/components/backtest/MonteCarloPanel'
+import { DcaComparePanel } from '@/components/backtest/DcaComparePanel'
 
 const TIMEFRAMES = ['1m', '5m', '15m', '1h', '4h', '1d'] as const
 const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT']
@@ -41,6 +42,7 @@ export function Backtests() {
   // The exact request that produced `result`, so Monte Carlo stresses the identical run.
   const [lastReq, setLastReq] = useState<BacktestRequest | null>(null)
   const [mcResult, setMcResult] = useState<MonteCarloResponse | null>(null)
+  const [dcaResult, setDcaResult] = useState<DcaCompareResponse | null>(null)
 
   const { data: available } = useQuery({
     queryKey: ['backtests', 'strategies'],
@@ -65,6 +67,19 @@ export function Backtests() {
   const montecarlo = useMutation({
     mutationFn: () => api.backtests.montecarlo({ ...(lastReq as BacktestRequest), n_simulations: 5000 }),
     onSuccess: (data) => setMcResult(data),
+    onError: (err) => toastError(err),
+  })
+
+  // DCA vs cycle-grid comparison — BTC-focused; re-runs an accumulation sim server-side.
+  const dcaCompare = useMutation({
+    mutationFn: () => api.backtests.dcaCompare({
+      symbol: form.symbol, timeframe: '1d',
+      start: startDate ? new Date(startDate).toISOString() : undefined,
+      end: endDate ? new Date(endDate).toISOString() : undefined,
+      capital_model: 'contributions', contribution_amount: 100, contribution_interval_days: 7,
+      commission_pct: form.commission_pct, slippage_pct: form.slippage_pct ?? 0.0005,
+    }),
+    onSuccess: (data) => setDcaResult(data),
     onError: (err) => toastError(err),
   })
 
@@ -118,6 +133,7 @@ export function Backtests() {
     e.preventDefault()
     setResult(null)
     setMcResult(null)   // a fresh backtest invalidates the previous MC run
+    setDcaResult(null)  // ...and the previous DCA comparison
     const req: BacktestRequest = {
       ...form,
       start: startDate ? new Date(startDate).toISOString() : undefined,
@@ -411,6 +427,21 @@ export function Backtests() {
                 >
                   <Dices size={14} />
                   {montecarlo.isPending ? t('backtests.montecarlo.running') : t('backtests.montecarlo.run')}
+                </button>
+              )}
+
+              {/* DCA vs halving-cycle-grid comparison — opt-in, BTC-focused. */}
+              {dcaResult ? (
+                <DcaComparePanel result={dcaResult} />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => dcaCompare.mutate()}
+                  disabled={dcaCompare.isPending}
+                  className="flex items-center justify-center gap-2 self-start bg-surface border border-border rounded-lg px-4 py-2.5 text-sm font-medium hover:border-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  <TrendingUp size={14} />
+                  {dcaCompare.isPending ? t('backtests.dca.running') : t('backtests.dca.run')}
                 </button>
               )}
             </>

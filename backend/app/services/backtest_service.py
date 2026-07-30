@@ -111,7 +111,9 @@ class BacktestService:
         # Skip cache when no start bound — can't validate coverage without a lower bound.
         # Always fetch fresh (up to _FETCH_LIMIT bars); yfinance_provider derives start from end.
         if req.start is None:
-            logger.info("backtest.service.run", strategy=req.strategy_name, symbol=req.symbol)
+            # _get_bars is a shared data-access helper; the caller may be a DCA comparison
+            # (no strategy_name), so don't assume it — log the symbol, and strategy if present.
+            logger.info("backtest.service.run", strategy=getattr(req, "strategy_name", None), symbol=req.symbol)
             return await fetch_ohlcv(symbol=req.symbol, timeframe=timeframe, limit=_FETCH_LIMIT, end=req.end)
 
         async with AsyncSessionLocal() as session:

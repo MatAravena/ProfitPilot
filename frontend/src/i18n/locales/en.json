@@ -156,6 +156,24 @@
       "realized": "Realized",
       "simsLabel": "Simulations",
       "ruinWarning": "Risk of ruin: {{pct}} of simulations wiped out the account."
+    },
+    "dca": {
+      "title": "DCA vs Cycle Grid (BTC)",
+      "run": "Compare DCA vs Cycle Grid",
+      "running": "Comparing…",
+      "note": "The halving cycle is BTC-specific; run this on BTC.",
+      "finalValue": "Final value",
+      "totalReturn": "Total return",
+      "maxDrawdown": "Max drawdown",
+      "sharpe": "Sharpe",
+      "avgCost": "Avg cost",
+      "dryPowder": "Dry powder",
+      "arm": {
+        "label": "Strategy",
+        "flat_dca": "Flat DCA",
+        "smart_accumulate": "Cycle accumulate",
+        "full_rotation": "Cycle rotation"
+      }
     }
   },
   "portfolio": {

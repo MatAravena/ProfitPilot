@@ -121,6 +121,29 @@ percentiles of total return and max-drawdown, probability of profit, and risk of
 realized single-path result drawn as a reference line. It's pure vectorized numpy (no persistence);
 5k simulations run in well under a second.
 
+### DCA vs halving-cycle grid — does timing beat dollar-cost averaging?
+
+A separate opt-in tool on the Backtests page (`POST /api/v1/backtests/dca-compare`) runs three
+accumulation strategies over the same BTC history and reports them side by side:
+
+- **Flat DCA** — deploy a fixed amount every period (the benchmark).
+- **Cycle accumulate** — deploy scaled by the Bitcoin *halving cycle* (master clock) times price
+  confirmation. Halvings are deterministic (~every 1458 days), so "days since halving" is only-past.
+  The heuristic: a cycle top ~535 days after a halving, a bottom ~380 days after that. Buying
+  intensity peaks near the predicted bottom (and deepens as price falls below its running high — the
+  grid-like part); under-deployed cash is saved as **dry powder** for dips.
+- **Cycle rotation** — same, but also *distributes* (sells to cash) into the predicted-top window and
+  redeploys into the next bottom.
+
+It's a deliberately separate simulator from the signal-based `BacktestEngine` (accumulation is
+multi-buy, not single-position), and it inherits the same commission + slippage cost model.
+
+**Honesty caveat (shown in the tool):** only ~3 completed halving cycles exist, so the offsets are fit
+to past tops/bottoms — a 2016–2024 backtest beats DCA almost by construction. All offsets are tunable
+parameters, and results should be read as *one live out-of-sample cycle, not proof*. Making the
+cycle-grid a live-deployable strategy is a deliberate follow-up, gated on the comparison showing a
+robust edge.
+
 ### What this means for you (user side)
 
 - A good backtest is **necessary, not sufficient.** Keep `slippage_pct`, commission, and
@@ -394,6 +417,7 @@ class MyBrokerAdapter(BrokerAdapter):
 - [x] Strategy engine with built-in strategies + user-defined auto-loading
 - [x] Backtesting — equity curve, trade chart, performance metrics
 - [x] Monte Carlo robustness — resample a backtest's trade sequence (bootstrap + shuffle) into a distribution of outcomes; separates edge from luck
+- [x] DCA vs halving-cycle-grid comparison — runs flat DCA, cycle-weighted accumulation, and full rotation over the same BTC history; reports final value, drawdown/Sharpe, and avg cost basis side by side (research tool; not live-deployable yet)
 - [x] Yahoo Finance + Bybit data providers with OHLCV caching
 - [x] AI Strategy Builder (Monaco + Claude + sandbox execution)
 - [x] Live/paper strategy executor with WebSocket signals

@@ -39,6 +39,38 @@ class BacktestMetrics(NamedTuple):
     final_equity: float
 
 
+def max_drawdown_pct(values: List[float], starting_peak: float) -> float:
+    """Max peak-to-trough drawdown (%) of an equity series, measured from ``starting_peak``.
+
+    Pure — shared by the backtest engine (peak = initial capital) and the accumulation
+    simulator (peak = the series' first value)."""
+    peak = starting_peak
+    max_dd = 0.0
+    for v in values:
+        if v > peak:
+            peak = v
+        if peak > 0:
+            dd = (peak - v) / peak * 100
+            if dd > max_dd:
+                max_dd = dd
+    return max_dd
+
+
+def annualized_sharpe(values: List[float], bars_per_year: int) -> float:
+    """Annualized Sharpe of an equity series (0 if fewer than 2 usable returns / no variance)."""
+    returns = []
+    for i in range(1, len(values)):
+        prev, curr = values[i - 1], values[i]
+        if prev > 0:
+            returns.append((curr - prev) / prev)
+    if len(returns) <= 1:
+        return 0.0
+    mean_r = sum(returns) / len(returns)
+    variance = sum((r - mean_r) ** 2 for r in returns) / (len(returns) - 1)
+    std_r = math.sqrt(variance) if variance > 0 else 0
+    return (mean_r / std_r) * math.sqrt(bars_per_year) if std_r > 0 else 0.0
+
+
 def compute_metrics(
     equity_curve: List[EquityPoint],
     trades: List[TradeRecord],
@@ -51,31 +83,9 @@ def compute_metrics(
     final_equity = equity_curve[-1].value
     total_return_pct = (final_equity - initial_capital) / initial_capital * 100
 
-    # Drawdown
-    peak = initial_capital
-    max_dd = 0.0
-    for pt in equity_curve:
-        if pt.value > peak:
-            peak = pt.value
-        dd = (peak - pt.value) / peak * 100
-        if dd > max_dd:
-            max_dd = dd
-
-    # Returns per bar for Sharpe
-    returns = []
-    for i in range(1, len(equity_curve)):
-        prev = equity_curve[i - 1].value
-        curr = equity_curve[i].value
-        if prev > 0:
-            returns.append((curr - prev) / prev)
-
-    sharpe = 0.0
-    if len(returns) > 1:
-        mean_r = sum(returns) / len(returns)
-        variance = sum((r - mean_r) ** 2 for r in returns) / (len(returns) - 1)
-        std_r = math.sqrt(variance) if variance > 0 else 0
-        if std_r > 0:
-            sharpe = (mean_r / std_r) * math.sqrt(bars_per_year)
+    values = [pt.value for pt in equity_curve]
+    max_dd = max_drawdown_pct(values, initial_capital)
+    sharpe = annualized_sharpe(values, bars_per_year)
 
     # Trade stats
     wins = [t for t in trades if t.pnl > 0]

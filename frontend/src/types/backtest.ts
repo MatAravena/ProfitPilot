@@ -70,6 +70,48 @@ export interface MonteCarloRequest extends BacktestRequest {
 
 export type MonteCarloMethod = 'bootstrap' | 'shuffle'
 
+// --- DCA vs halving-cycle-grid comparison (mirrors backend DcaCompareResponse) ---
+
+export interface DcaCompareRequest {
+  symbol: string
+  timeframe: string
+  start?: string
+  end?: string
+  capital_model: 'contributions' | 'lump_sum'
+  contribution_amount: number
+  contribution_interval_days: number
+  lump_sum_budget?: number
+  commission_pct?: number
+  slippage_pct?: number
+}
+
+export interface DcaArmResult {
+  equity_curve: EquityPoint[]
+  final_value: number
+  total_contributed: number
+  total_return_pct: number
+  units_accumulated: number
+  avg_cost_basis: number
+  max_drawdown_pct: number
+  sharpe_ratio: number
+  dry_powder: number
+  realized_pnl: number
+}
+
+export interface CycleMarker {
+  timestamp: number   // Unix ms
+  kind: 'top' | 'bottom'
+}
+
+export interface DcaCompareResponse {
+  symbol: string
+  timeframe: string
+  capital_model: string
+  caveat: string
+  cycle_markers: CycleMarker[]
+  arms: Record<string, DcaArmResult>
+}
+
 export interface PercentileStats {
   p5: number
   p25: number

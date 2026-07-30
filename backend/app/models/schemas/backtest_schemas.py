@@ -129,6 +129,69 @@ class MonteCarloResponse(BaseModel):
     methods: Dict[str, MonteCarloMethodResponse]
 
 
+CAVEAT_TEXT = (
+    "Only ~3 completed halving cycles exist; the cycle offsets are fit to past tops/bottoms. "
+    "Read this as one live out-of-sample cycle, not proof."
+)
+
+
+class CycleParamsSchema(BaseModel):
+    days_to_top: int = Field(535, ge=200, le=900)
+    top_to_bottom: int = Field(380, ge=200, le=900)
+    sigma_top: float = Field(90.0, gt=0, le=400)
+    sigma_bottom: float = Field(120.0, gt=0, le=400)
+    base_buy: float = Field(0.25, ge=0, le=1)
+    rolling_window: int = Field(90, ge=7, le=400)
+    k_buy: float = Field(0.5, gt=0, le=1)
+    k_sell: float = Field(0.35, gt=0, le=1)
+
+
+class DcaCompareRequest(BaseModel):
+    symbol: str = Field("BTCUSDT")
+    timeframe: str = Field("1d")
+    start: Optional[datetime] = None
+    end: Optional[datetime] = None
+    capital_model: Literal["contributions", "lump_sum"] = "contributions"
+    contribution_amount: float = Field(100.0, ge=0)
+    contribution_interval_days: int = Field(7, ge=1, le=365)
+    lump_sum_budget: float = Field(0.0, ge=0)
+    commission_pct: float = Field(0.001, ge=0)
+    slippage_pct: float = Field(0.0005, ge=0, le=0.1)
+    cycle: CycleParamsSchema = Field(default_factory=CycleParamsSchema)
+
+    @field_validator("start", "end", mode="after")
+    @classmethod
+    def normalize_tz(cls, v: Optional[datetime]) -> Optional[datetime]:
+        return to_naive_utc(v)
+
+
+class ArmResultResponse(BaseModel):
+    equity_curve: List[EquityPointResponse]
+    final_value: float
+    total_contributed: float
+    total_return_pct: float
+    units_accumulated: float
+    avg_cost_basis: float
+    max_drawdown_pct: float
+    sharpe_ratio: float
+    dry_powder: float
+    realized_pnl: float
+
+
+class CycleMarker(BaseModel):
+    timestamp: int   # Unix ms (UTC midnight of the predicted date)
+    kind: str        # "top" | "bottom"
+
+
+class DcaCompareResponse(BaseModel):
+    symbol: str
+    timeframe: str
+    capital_model: str
+    caveat: str
+    cycle_markers: List[CycleMarker]
+    arms: Dict[str, ArmResultResponse]   # keys: flat_dca, smart_accumulate, full_rotation
+
+
 class StrategyParamDef(BaseModel):
     key: str
     type: str
