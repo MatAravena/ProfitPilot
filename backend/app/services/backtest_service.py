@@ -6,6 +6,7 @@ from typing import List, Optional
 import structlog
 
 from app.core.constants import MIN_BACKTEST_BARS
+from app.core.datetime_utils import to_naive_utc
 from app.core.enums import Timeframe
 from app.core.types import OHLCV, RiskConfig
 from app.domain.backtest.data_provider import fetch_ohlcv
@@ -108,13 +109,13 @@ class BacktestService:
         """Cache-aside: serve from DB when the range is fully covered, otherwise fetch and store."""
         from app.db.base import AsyncSessionLocal
 
-        # Skip cache when no start bound — can't validate coverage without a lower bound.
-        # Always fetch fresh (up to _FETCH_LIMIT bars); yfinance_provider derives start from end.
+        # No start bound: serve from the DB cache and fetch only the missing recent tail. Best-effort
+        # — any DB error degrades to a plain fetch so a comparison never fails because of caching.
         if req.start is None:
             # _get_bars is a shared data-access helper; the caller may be a DCA comparison
             # (no strategy_name), so don't assume it — log the symbol, and strategy if present.
             logger.info("backtest.service.run", strategy=getattr(req, "strategy_name", None), symbol=req.symbol)
-            return await fetch_ohlcv(symbol=req.symbol, timeframe=timeframe, limit=_FETCH_LIMIT, end=req.end)
+            return await self._get_bars_incremental(req, timeframe)
 
         async with AsyncSessionLocal() as session:
             repo = OhlcvRepository(session)
@@ -148,6 +149,42 @@ class BacktestService:
                 await session.commit()
 
             return bars
+
+    async def _get_bars_incremental(self, req: BacktestRequest, timeframe: Timeframe) -> List[OHLCV]:
+        """No-start caching: return everything stored up to ``end`` and fetch only the tail beyond
+        the last cached bar (persisting it). Falls back to a plain fetch on any DB error."""
+        from app.db.base import AsyncSessionLocal
+
+        try:
+            async with AsyncSessionLocal() as session:
+                repo = OhlcvRepository(session)
+                cached = await repo.get_range(req.symbol, req.timeframe, None, req.end)
+
+                if cached:
+                    last_ts = cached[-1].timestamp
+                    fresh = await fetch_ohlcv(
+                        symbol=req.symbol, timeframe=timeframe, limit=_FETCH_LIMIT,
+                        start=last_ts, end=req.end,
+                    )
+                    # Normalize both sides — provider bars may be tz-aware, DB rows are naive UTC.
+                    last_naive = to_naive_utc(last_ts)
+                    new = [b for b in fresh if to_naive_utc(b.timestamp) > last_naive]
+                    if new:
+                        await repo.upsert_bars(new)
+                        await session.commit()
+                    logger.info("backtest.cache_hit_incremental", symbol=req.symbol,
+                                timeframe=req.timeframe, cached=len(cached), fetched=len(new))
+                    return [_row_to_ohlcv(row, timeframe) for row in cached] + new
+
+                bars = await fetch_ohlcv(symbol=req.symbol, timeframe=timeframe, limit=_FETCH_LIMIT, end=req.end)
+                if bars:
+                    await repo.upsert_bars(bars)
+                    await session.commit()
+                logger.info("backtest.cache_seed", symbol=req.symbol, timeframe=req.timeframe, bars=len(bars))
+                return bars
+        except Exception as exc:  # pragma: no cover — defensive: never fail a run over caching
+            logger.warning("backtest.cache_unavailable", symbol=req.symbol, error=str(exc))
+            return await fetch_ohlcv(symbol=req.symbol, timeframe=timeframe, limit=_FETCH_LIMIT, end=req.end)
 
     def list_strategies(self) -> AvailableStrategiesResponse:
         return AvailableStrategiesResponse(strategies=get_all_strategy_classes())

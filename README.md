@@ -123,7 +123,26 @@ realized single-path result drawn as a reference line. It's pure vectorized nump
 
 ### DCA vs halving-cycle grid — does timing beat dollar-cost averaging?
 
-A separate opt-in tool on the Backtests page (`POST /api/v1/backtests/dca-compare`) runs three
+> **In plain English (read this first).**
+> We tested **7 ways to buy Bitcoin with $100/week** over BTC's whole history to answer one question:
+> *can a bot that buys **and sells** beat simply buying every week and holding (DCA)?*
+>
+> - **Just buying every week and never selling (DCA) is really hard to beat** on an asset that mostly
+>   goes up — any time your money sits in cash, it misses the rise.
+> - **Selling near the top to buy back cheaper only works if you buy back at the right time** — deep
+>   in the crash. Our naive first try sold at the wrong moments and lost badly (−42%).
+> - **The winner, "Cycle rotation v2":** near a cycle top it sells most of the stack, waits, then buys
+>   back **gradually as price falls into the second half of the crash** (it doesn't try to nail the
+>   exact bottom). Over full history it ended with **~13% more Bitcoin than DCA** (more on shorter
+>   windows), *and* it banks cash profit along the way.
+> - **Big asterisk:** v2 partly "knows" how big past crashes were and when tops happened — that's
+>   hindsight. The honest version, **"Cycle rotation (auto)"**, only learns from the *past* and does
+>   much less well (roughly break-even to a few percent). So treat the edge as **"probably small and
+>   uncertain, plus some cash income,"** not free money.
+> - **Bottom line for a real bot:** expect a **smoother ride and some realized income**, not a
+>   guaranteed way to out-stack buy-and-hold. Everything below is the detailed version.
+
+A separate opt-in tool on the Backtests page (`POST /api/v1/backtests/dca-compare`) runs seven
 accumulation strategies over the same BTC history and reports them side by side:
 
 - **Flat DCA** — deploy a fixed amount every period (the benchmark).
@@ -134,15 +153,102 @@ accumulation strategies over the same BTC history and reports them side by side:
   grid-like part); under-deployed cash is saved as **dry powder** for dips.
 - **Cycle rotation** — same, but also *distributes* (sells to cash) into the predicted-top window and
   redeploys into the next bottom.
+- **Cycle hunter** — an ATH-aware rotation *state machine*: it trims into the top (keeping a ~70%
+  core), waits out a ~3-month cooldown after the top confirms, then accumulates the decline until
+  price recovers near the prior ATH. The halving windows say *when* to look; EMA(50)/SMA(200) trend,
+  Supertrend direction, and an ATR-percentile volatility gate must *confirm* before it acts. All
+  indicators are pure-Python and look-ahead-free.
+- **Accumulator grid** — a buy-the-dip grid: hold a small cash reserve and deploy it
+  *disproportionately into drawdowns* (deeper dip → more coins per dollar), never fully exit (a
+  ratcheting core floor), and take only light, trend-gated profit trims near local highs — banking
+  realized income that recycles into the next dip. The edge is on the *buy* side, not on timing tops.
+- **Cycle rotation v2** — the "sell high / buy the lower half" thesis done right: sell most of the
+  stack (`sell_fraction_at_ath`, up to ~100%) near a **confirmed** ATH (weighted by halving intensity
+  so selling clusters at the top), then deploy the whole war chest **across the lower half of the
+  drawdown** — from −½·`expected_bear_drop` down to the full drop and below (`buy_target =
+  ATH×(1−expected_bear_drop)`). It scales in progressively so it doesn't need to nail the exact
+  bottom. You set the assumptions.
+- **Cycle rotation (auto)** — the same engine, but `expected_bear_drop` is **derived from history**:
+  the shallowest realized past drawdown (only-past, no look-ahead) minus a `caution_margin`, so it
+  deploys a little shallower than the worst case and is ~guaranteed a fill while still buying cheap.
+  This is the honest out-of-sample proxy for v2 (which "knows" the drop by assumption).
 
 It's a deliberately separate simulator from the signal-based `BacktestEngine` (accumulation is
 multi-buy, not single-position), and it inherits the same commission + slippage cost model.
 
+**Every strategy's knobs are tunable via the request body** (`cycle`, `hunter`, `rotation` blocks on
+`POST /dca-compare`) — e.g. `{"rotation": {"sell_fraction_at_ath": 1.0, "expected_bear_drop": 0.65}}`
+or `{"hunter": {"sell_cap_frac": 1.0}}` — so you can experiment without code changes. Indicators
+(EMA/SMA/ATR/Supertrend, ATR-percentile) live in `domain/backtest/indicators.py`; cycle-drawdown stats
+in `domain/backtest/cycle_stats.py`; all pure-Python and look-ahead-free.
+
+**OHLCV is cached in the DB.** The compare path persists fetched bars to the `ohlcv` table and, on
+repeat runs, serves from the DB and fetches only the missing recent tail from Yahoo/Bybit (chunked
+inserts ≤112 rows for the SQLite bind-var limit; best-effort — a DB error degrades to a plain fetch).
+
+The `AccumulationLedger` uses **moving-average cost basis**: a sell removes cost from the pool at the
+running average, so `realized_pnl` (gain on units actually sold) and `avg_cost_basis` (basis of the
+units still held) stay correct across repeated buy/sell rotation. (An earlier lifetime-average version
+never reduced the cost pool on sells, which wildly inflated `realized_pnl` for any selling arm.)
+
+**What the runs show ($100/week, costs included).** Two contexts: full 1d history (2014→now, Yahoo)
+and a matched 2020-03→now window on 1d vs 4h (the only range with 4h data — Bybit perp inception,
+starting at the COVID bottom). Final value **vs flat DCA**:
+
+| Strategy | 1d full (2014+) | 1d (2020+) | 4h (2020+) |
+|---|--:|--:|--:|
+| flat_dca | — | — | — |
+| smart_accumulate | −1.6% | −3.5% | −0.9% |
+| full_rotation | −41.7% | +17.6% | −10.3% |
+| cycle_hunter | +6.1% | 0.0% | +23.8% |
+| accumulator_grid | −5.9% | −1.1% | −1.9% |
+| **cycle_rotation_v2** | **+13.2%** | **+32.7%** | **+15.4%** |
+| cycle_rotation_auto | −11.8% | +5.4% | +2.7% |
+
+(4h figures use **timeframe-normalized** per-bar rates — the `*_daily` deploy/sell rates are divided by
+bars-per-day, so a strategy behaves the same per *calendar day* on 1d and 4h instead of firing 6× as
+often on 4h. This removed the earlier 4h inflation; `cycle_rotation_v2` on 4h went from a misleading
++46.5% to a comparable +15.4%.)
+
+**The thesis holds when the bottom-buying is done right.** `cycle_rotation_v2` — sell ~70% near a
+confirmed top, then deploy the war chest across the *lower half* of the drawdown — beats DCA on every
+timeframe, on **coins and value** (full-1d: 44.6 vs 39.4 BTC). The earlier `full_rotation` lost badly
+because it sold on local highs and dribbled the cash back in; concentrating the rebuy in the deep-dip
+zone is what turns "sell high / buy low" into net accumulation.
+
+**But read v2 as optimistic/in-sample.** It *assumes* the ~70% drop (hindsight) and sells at
+halving-*predicted* tops fitted to the 3 historical tops. The **auto** arm is the honest check — it
+learns the drop cautiously from only-past drawdowns — and it earns a far smaller, sometimes negative
+edge (+4–5% recent, −12% full-history, where early cycles give it nothing to learn from). So the
+durable read is: **a small, uncertain edge plus realized cash income and, for cycle-hunter, lower
+drawdown** — not a reliable +40%. One caveat stays attached: only ~3 completed cycles (fitting risk).
+(The earlier 4h-inflation caveat is now fixed — per-bar rates are normalized by bars-per-day, so 1d
+and 4h are directly comparable.)
+
 **Honesty caveat (shown in the tool):** only ~3 completed halving cycles exist, so the offsets are fit
-to past tops/bottoms — a 2016–2024 backtest beats DCA almost by construction. All offsets are tunable
-parameters, and results should be read as *one live out-of-sample cycle, not proof*. Making the
-cycle-grid a live-deployable strategy is a deliberate follow-up, gated on the comparison showing a
-robust edge.
+to past tops/bottoms — these backtests are *one live out-of-sample cycle, not proof*. All offsets are
+tunable parameters. Making any cycle strategy live-deployable is a deliberate follow-up, gated on the
+comparison showing a robust edge.
+
+**Do grids shine on *ranging* assets? (tested — surprising answer: no.)** Grid trading is supposed to
+beat buy-and-hold on sideways markets by harvesting volatility, so we tested `accumulator_grid` (default
+and a ranging-tuned config — small `profit_step`, `use_trend_filter=False`) vs DCA across trending
+assets (BTC, SPY, gold) and range-bound ones (EUR/USD, GBP/USD), plus a synthetic high-volatility sine.
+**No grid config beat DCA — not even an aggressive symmetric grid on a perfect zero-cost sine (−13.5%).**
+The reason is structural and elegant: **DCA is *itself* a volatility harvester** — buying a fixed $
+every week automatically buys more units when price is low (∑ 100/price is maximized by volatility), so
+DCA already gets a low average cost on a ranging asset, and a grid's *selling* just hands units back.
+The classic grid/"rebalancing bonus" (Shannon's demon) applies to **fixed-capital rebalancing**, not
+dollar-cost *contributions*; real trading costs only widen the gap. (One real improvement did come out
+of this: `AccumulatorGridParams.use_trend_filter` — turn the 200-SMA "only trim in an uptrend" gate off
+for assets with no trend to respect.)
+
+**Still improvable (backlog).** Open ideas: model the observed correlation between each cycle's
+ATH-gain and its drawdown more richly (the `auto` arm currently uses only the shallowest past drop);
+adapt `expected_bear_drop`/sell-fraction per cycle as BTC matures and bears get shallower; a
+fixed-capital **rebalancing** strategy (the framing where the harvest bonus *does* exist); and a
+**Backtests-page form to tune every strategy's params live** (they're already tunable via the API body —
+the UI is the missing piece). Contributions welcome.
 
 ### What this means for you (user side)
 
@@ -417,7 +523,7 @@ class MyBrokerAdapter(BrokerAdapter):
 - [x] Strategy engine with built-in strategies + user-defined auto-loading
 - [x] Backtesting — equity curve, trade chart, performance metrics
 - [x] Monte Carlo robustness — resample a backtest's trade sequence (bootstrap + shuffle) into a distribution of outcomes; separates edge from luck
-- [x] DCA vs halving-cycle-grid comparison — runs flat DCA, cycle-weighted accumulation, and full rotation over the same BTC history; reports final value, drawdown/Sharpe, and avg cost basis side by side (research tool; not live-deployable yet)
+- [x] DCA vs halving-cycle-grid comparison — 7 arms (flat DCA, cycle accumulate, full rotation, cycle-hunter, accumulator grid, cycle_rotation_v2, cycle_rotation_auto) over the same BTC history; per-strategy params tunable via the request body; OHLCV cached in the DB (incremental tail fetch); reports final value, drawdown/Sharpe/Calmar, avg cost basis side by side (research tool; not live-deployable yet). Finding: cycle_rotation_v2 (sell high / buy the lower half of the drop) beats DCA on coins+value in-sample, but the honest auto-derived arm shows the durable edge is small/uncertain + realized income
 - [x] Yahoo Finance + Bybit data providers with OHLCV caching
 - [x] AI Strategy Builder (Monaco + Claude + sandbox execution)
 - [x] Live/paper strategy executor with WebSocket signals

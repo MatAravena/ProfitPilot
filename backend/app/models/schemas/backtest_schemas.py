@@ -146,6 +146,29 @@ class CycleParamsSchema(BaseModel):
     k_sell: float = Field(0.35, gt=0, le=1)
 
 
+class HunterParamsSchema(BaseModel):
+    """Tunable knobs for the cycle_hunter arm (sell_cap can now go all the way to 1.0)."""
+    sell_cap_frac: float = Field(0.30, ge=0, le=1)
+    cooldown_days: int = Field(90, ge=0, le=365)
+    reentry_within: float = Field(0.15, ge=0, le=1)
+    k_bear_daily: float = Field(0.05, gt=0, le=1)
+
+
+class RotationParamsSchema(BaseModel):
+    """Tunable knobs for the cycle_rotation_v2 / cycle_rotation_auto arms."""
+    sell_fraction_at_ath: float = Field(0.70, ge=0, le=1)
+    ath_band: float = Field(0.08, gt=0, le=0.5)
+    sell_intensity_hi: float = Field(0.85, ge=0, le=1)
+    k_sell_daily: float = Field(0.10, gt=0, le=1)
+    sell_sharpness: float = Field(4.0, ge=1, le=12)
+    expected_bear_drop: float = Field(0.70, gt=0, lt=1)   # manual (v2) arm
+    buy_zone_top_frac: float = Field(0.50, ge=0, le=1)
+    k_deploy_daily: float = Field(0.10, gt=0, le=1)
+    deploy_floor: float = Field(0.30, ge=0, le=1)
+    reentry_gain: float = Field(0.30, gt=0, le=2)
+    caution_margin: float = Field(0.05, ge=0, le=0.5)     # auto arm shaves the derived drop shallower
+
+
 class DcaCompareRequest(BaseModel):
     symbol: str = Field("BTCUSDT")
     timeframe: str = Field("1d")
@@ -158,6 +181,8 @@ class DcaCompareRequest(BaseModel):
     commission_pct: float = Field(0.001, ge=0)
     slippage_pct: float = Field(0.0005, ge=0, le=0.1)
     cycle: CycleParamsSchema = Field(default_factory=CycleParamsSchema)
+    hunter: HunterParamsSchema = Field(default_factory=HunterParamsSchema)
+    rotation: RotationParamsSchema = Field(default_factory=RotationParamsSchema)
 
     @field_validator("start", "end", mode="after")
     @classmethod

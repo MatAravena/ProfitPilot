@@ -167,7 +167,11 @@
         "label": "Estrategia",
         "flat_dca": "DCA plano",
         "smart_accumulate": "Acumulación de ciclo",
-        "full_rotation": "Rotación de ciclo"
+        "full_rotation": "Rotación de ciclo",
+        "cycle_hunter": "Cazador de ciclo",
+        "accumulator_grid": "Grid acumulador",
+        "cycle_rotation_v2": "Rotación de ciclo v2",
+        "cycle_rotation_auto": "Rotación de ciclo (auto)"
       }
     }
   },

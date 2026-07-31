@@ -63,5 +63,18 @@ async def client():
     from httpx import AsyncClient, ASGITransport
     from app.main import app
 
+    # ASGITransport doesn't run the app lifespan, so create tables here. Also clear the OHLCV
+    # cache so each integration test starts from an empty cache (the DCA-compare path now persists
+    # fetched bars — without this, data would leak between tests via the shared in-memory DB).
+    from sqlalchemy import delete
+    from app.db.base import engine, Base, AsyncSessionLocal
+    import app.models.db as _models_db  # noqa: F401 — register ORM models (aliased so it doesn't shadow `app`)
+    from app.models.db.ohlcv_bar import OhlcvBar
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    async with AsyncSessionLocal() as session:
+        await session.execute(delete(OhlcvBar))
+        await session.commit()
+
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac

@@ -8,8 +8,11 @@ import structlog
 
 from app.core.constants import MIN_BACKTEST_BARS
 from app.domain.backtest.accumulation import (
-    ArmResult, CycleWeightedPolicy, FlatDcaPolicy, run_accumulation,
+    AccumulatorGridParams, AccumulatorGridPolicy, ArmResult, CycleHunterParams,
+    CycleHunterPolicy, CycleRotationParams, CycleRotationPolicy, CycleWeightedPolicy,
+    FlatDcaPolicy, run_accumulation,
 )
+from app.domain.backtest.cycle_stats import auto_drop_estimator
 from app.domain.backtest.engine import BacktestEngine  # reuse the bars-per-year mapping
 from app.domain.backtest.halving_cycle import CycleParams, cycle_markers
 from app.models.schemas.backtest_schemas import DcaCompareRequest
@@ -63,6 +66,19 @@ class AccumulationCompareService:
         )
         bars_per_year = BacktestEngine._infer_bars_per_year(timeframe)  # noqa: SLF001
 
+        rotation_params = CycleRotationParams(
+            sell_fraction_at_ath=req.rotation.sell_fraction_at_ath,
+            ath_band=req.rotation.ath_band,
+            sell_intensity_hi=req.rotation.sell_intensity_hi,
+            k_sell_daily=req.rotation.k_sell_daily,
+            sell_sharpness=req.rotation.sell_sharpness,
+            expected_bear_drop=req.rotation.expected_bear_drop,
+            buy_zone_top_frac=req.rotation.buy_zone_top_frac,
+            k_deploy_daily=req.rotation.k_deploy_daily,
+            deploy_floor=req.rotation.deploy_floor,
+            reentry_gain=req.rotation.reentry_gain,
+        )
+
         common = dict(
             capital_model=req.capital_model,
             contribution_amount=req.contribution_amount,
@@ -85,6 +101,38 @@ class AccumulationCompareService:
                 bars,
                 CycleWeightedPolicy(params, distribute=True, k_buy=req.cycle.k_buy,
                                     k_sell=req.cycle.k_sell, rolling_window=req.cycle.rolling_window),
+                **common,
+            ),
+            # ATH-aware rotation state machine (sell near top -> ~3-month cooldown ->
+            # accumulate the decline). sell_cap tunable up to 1.0 via the request.
+            "cycle_hunter": run_accumulation(
+                bars,
+                CycleHunterPolicy(params, CycleHunterParams(
+                    sell_cap_frac=req.hunter.sell_cap_frac,
+                    cooldown_days=req.hunter.cooldown_days,
+                    reentry_within=req.hunter.reentry_within,
+                    k_bear_daily=req.hunter.k_bear_daily,
+                )),
+                **common,
+            ),
+            # Buy-the-dip accumulation grid: deploy reserve into drawdowns, light trend-gated
+            # profit trims, ratcheting core floor. Edge is on the buy side, not timing tops.
+            "accumulator_grid": run_accumulation(
+                bars, AccumulatorGridPolicy(AccumulatorGridParams()), **common,
+            ),
+            # Sell most near a confirmed ATH, then deploy the war chest across the lower half of
+            # the drawdown. v2 = you set expected_bear_drop; auto = derived from past cycles.
+            "cycle_rotation_v2": run_accumulation(
+                bars, CycleRotationPolicy(params, rotation_params), **common,
+            ),
+            "cycle_rotation_auto": run_accumulation(
+                bars,
+                CycleRotationPolicy(
+                    params, rotation_params,
+                    drop_estimator=auto_drop_estimator(
+                        [b.close for b in bars], caution_margin=req.rotation.caution_margin
+                    ),
+                ),
                 **common,
             ),
         }

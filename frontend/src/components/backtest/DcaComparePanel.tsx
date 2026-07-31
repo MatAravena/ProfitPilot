@@ -5,17 +5,26 @@ import {
 import { formatCurrency, formatPercent } from '@/lib/utils'
 import type { DcaCompareResponse } from '@/types/backtest'
 
-const ARM_ORDER = ['flat_dca', 'smart_accumulate', 'full_rotation'] as const
+// Preferred display order + colors. The chart/table render only the arms actually present in
+// the response, so adding or removing a backend arm doesn't break the panel.
+const ARM_ORDER = [
+  'flat_dca', 'smart_accumulate', 'full_rotation', 'cycle_hunter', 'accumulator_grid',
+  'cycle_rotation_v2', 'cycle_rotation_auto',
+] as const
 const ARM_COLOR: Record<string, string> = {
   flat_dca: '#64748B', smart_accumulate: '#2563EB', full_rotation: '#f59e0b',
+  cycle_hunter: '#a855f7', accumulator_grid: '#10b981',
+  cycle_rotation_v2: '#ec4899', cycle_rotation_auto: '#06b6d4',
 }
 
 export function DcaComparePanel({ result }: { result: DcaCompareResponse }) {
   const { t } = useTranslation()
 
+  const arms = ARM_ORDER.filter((name) => result.arms[name])
+
   // Merge the arms' equity curves into one dataset keyed by timestamp for an overlaid chart.
   const byTs = new Map<number, Record<string, number>>()
-  for (const name of ARM_ORDER) {
+  for (const name of arms) {
     for (const p of result.arms[name]?.equity_curve ?? []) {
       const row = byTs.get(p.timestamp) ?? { time: Math.floor(p.timestamp / 1000) }
       row[name] = p.value
@@ -69,7 +78,7 @@ export function DcaComparePanel({ result }: { result: DcaCompareResponse }) {
                 strokeDasharray="4 3"
               />
             ))}
-            {ARM_ORDER.map((name) => (
+            {arms.map((name) => (
               <Line
                 key={name}
                 type="monotone"
@@ -97,7 +106,7 @@ export function DcaComparePanel({ result }: { result: DcaCompareResponse }) {
               </tr>
             </thead>
             <tbody>
-              {ARM_ORDER.map((name) => {
+              {arms.map((name) => {
                 const a = result.arms[name]
                 if (!a) return null
                 return (

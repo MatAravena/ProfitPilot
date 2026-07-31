@@ -172,7 +172,11 @@
         "label": "Strategy",
         "flat_dca": "Flat DCA",
         "smart_accumulate": "Cycle accumulate",
-        "full_rotation": "Cycle rotation"
+        "full_rotation": "Cycle rotation",
+        "cycle_hunter": "Cycle hunter",
+        "accumulator_grid": "Accumulator grid",
+        "cycle_rotation_v2": "Cycle rotation v2",
+        "cycle_rotation_auto": "Cycle rotation (auto)"
       }
     }
   },
