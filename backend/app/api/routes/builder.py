@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
+from app.core.config import get_settings
 from app.domain.backtest.engine import BacktestResult
 from app.models.schemas.backtest_schemas import (
     BacktestMetricsResponse,
@@ -146,7 +147,7 @@ Return ONLY a JSON object with two fields:
     )
 
     message = await client.messages.create(
-        model="claude-sonnet-4-6",
+        model=get_settings().ANTHROPIC_MODEL,
         max_tokens=2048,
         system=system,
         messages=[{"role": "user", "content": user_msg}],

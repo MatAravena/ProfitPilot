@@ -13,7 +13,7 @@ from datetime import date, timedelta
 from typing import Callable, List, Optional, Protocol, Tuple
 
 from app.core.types import OHLCV
-from app.domain.backtest.halving_cycle import CycleParams, buy_intensity, sell_intensity
+from app.domain.backtest.halving_cycle import CycleParams, build_timing
 from app.domain.backtest.indicators import atr, ema, rolling_percentile, sma, supertrend
 from app.domain.backtest.metrics import EquityPoint, annualized_sharpe, max_drawdown_pct
 
@@ -130,6 +130,7 @@ class CycleWeightedPolicy:
         dd_ref: float = 0.5,
     ) -> None:
         self.params = params
+        self.timing = build_timing(params)   # gaussian curves or discrete halving windows
         self.distribute = distribute
         self.k_buy = k_buy
         self.k_sell = k_sell
@@ -163,7 +164,7 @@ class CycleWeightedPolicy:
         drawdown = (exp_high - price) / exp_high if exp_high > 0 else 0.0
         buy_conf = self._clamp(self.conf_floor + (1 - self.conf_floor) * (drawdown / self.dd_ref),
                                self.conf_floor, 1.0)
-        deploy_frac = self._clamp(self.k_buy * buy_intensity(d, self.params) * buy_conf, 0.0, 1.0)
+        deploy_frac = self._clamp(self.k_buy * self.timing.buy(d) * buy_conf, 0.0, 1.0)
         buy_cash = deploy_frac * ledger.cash
 
         sell_units = 0.0
@@ -171,7 +172,7 @@ class CycleWeightedPolicy:
             hi, lo = self._roll_high[i], self._roll_low[i]
             pos_in_range = (price - lo) / (hi - lo) if hi > lo else 0.0   # near recent high => 1
             sell_conf = self._clamp(pos_in_range, 0.0, 1.0)
-            sell_frac = self._clamp(self.k_sell * sell_intensity(d, self.params) * sell_conf, 0.0, 1.0)
+            sell_frac = self._clamp(self.k_sell * self.timing.sell(d) * sell_conf, 0.0, 1.0)
             sell_units = sell_frac * ledger.units
 
         return (buy_cash, sell_units)
@@ -215,6 +216,7 @@ class CycleHunterPolicy:
 
     def __init__(self, cycle: CycleParams = CycleParams(), hp: CycleHunterParams = CycleHunterParams()) -> None:
         self.cycle = cycle
+        self.timing = build_timing(cycle)   # gaussian curves or discrete halving windows
         self.hp = hp
 
     def prepare(self, bars: List[OHLCV]) -> None:
@@ -268,7 +270,7 @@ class CycleHunterPolicy:
 
         if state == "ACCUMULATE_BASE":
             near_ath = ath > 0 and price >= hp.ath_sell_trigger * ath
-            top_window = sell_intensity(d, self.cycle) >= hp.sell_intensity_hi
+            top_window = self.timing.sell(d) >= hp.sell_intensity_hi
             euphoric = atr_pct >= hp.atr_pctile_hi
             if near_ath and top_window and euphoric and st_bull and bull_regime:
                 self._state = "DISTRIBUTE"
@@ -317,7 +319,7 @@ class CycleHunterPolicy:
         depth = self._clamp(dd / hp.dd_ref, 0.0, 1.0)
         trend_boost = 1.25 if self._st[i] == 1 else 1.0     # accelerate once trend turns back up
         deploy_frac = self._clamp(
-            (hp.bear_floor + hp.k_bear_daily * depth * buy_intensity(d, self.cycle))
+            (hp.bear_floor + hp.k_bear_daily * depth * self.timing.buy(d))
             * trend_boost * self._rscale,
             0.0, 1.0,
         )
@@ -346,7 +348,8 @@ class CycleRotationPolicy:
     HALF of the drawdown (see 2026-07-30-cycle-rotation-redesign.md).
 
     States HOLD_CORE -> DISTRIBUTE -> DEPLOY -> HOLD_CORE. The only difference between the manual
-    (`cycle_rotation_v2`) and derived (`cycle_rotation_auto`) arms is ``drop_estimator``: a callable
+    (`cycle_selltop_redeploy_manual`) and derived (`cycle_selltop_redeploy_auto`) arms is
+    ``drop_estimator``: a callable
     (bar index -> expected drop, or None). Look-ahead-free: indicators precomputed only-from-past and
     the estimator itself only uses past drawdowns.
     """
@@ -358,6 +361,7 @@ class CycleRotationPolicy:
         drop_estimator: Optional[Callable[[int], Optional[float]]] = None,
     ) -> None:
         self.cycle = cycle
+        self.timing = build_timing(cycle)   # gaussian curves or discrete halving windows
         self.rp = rp
         # Default (manual) estimator returns the fixed expected_bear_drop.
         self._drop_est = drop_estimator or (lambda i: rp.expected_bear_drop)
@@ -400,7 +404,7 @@ class CycleRotationPolicy:
 
         if self._state == "HOLD_CORE":
             near_ath = ath > 0 and price >= (1 - rp.ath_band) * ath
-            top_window = sell_intensity(d, self.cycle) >= rp.sell_intensity_hi
+            top_window = self.timing.sell(d) >= rp.sell_intensity_hi
             if near_ath and top_window and st_bull:
                 self._state = "DISTRIBUTE"
                 self._dist_start_units = ledger.units
@@ -437,7 +441,7 @@ class CycleRotationPolicy:
         rp = self.rp
         core = (1 - rp.sell_fraction_at_ath) * self._dist_start_units
         sellable = max(0.0, ledger.units - core)
-        rate = rp.k_sell_daily * self._rscale * (sell_intensity(d, self.cycle) ** rp.sell_sharpness)
+        rate = rp.k_sell_daily * self._rscale * (self.timing.sell(d) ** rp.sell_sharpness)
         sell_units = self._clamp(rate, 0.0, 1.0) * sellable
         return (0.0, sell_units)
 

@@ -8,6 +8,7 @@ import structlog
 from app.core.enums import BrokerID, MarketType, OrderSide, OrderStatus, OrderType
 from app.core.types import Account, Order, OrderResult, Position, Tick
 from app.domain.broker.base import BrokerAdapter
+from app.domain.instruments import INSTRUMENTS, InstrumentCatalog, InstrumentError
 
 logger = structlog.get_logger(__name__)
 
@@ -53,7 +54,13 @@ class BybitAdapter(BrokerAdapter):
     Requires: pybit==5.8.0  (pip install pybit)
     """
 
-    def __init__(self, api_key: str, secret_key: str, paper_mode: bool = True):
+    def __init__(
+        self,
+        api_key: str,
+        secret_key: str,
+        paper_mode: bool = True,
+        instruments: InstrumentCatalog = INSTRUMENTS,
+    ):
         super().__init__(
             broker_id=BrokerID.BYBIT,
             api_key=api_key,
@@ -63,6 +70,9 @@ class BybitAdapter(BrokerAdapter):
         )
         self._base_url: str = _TESTNET_BASE if paper_mode else _LIVE_BASE
         self._session = None  # pybit HTTP session, set in connect()
+        # Injected abstraction, not the concrete registry — a broker-refreshed or
+        # DB-backed catalog drops in here without this adapter changing.
+        self._instruments = instruments
 
     # ── Lifecycle ──────────────────────────────────────────────────────────────
 
@@ -100,13 +110,14 @@ class BybitAdapter(BrokerAdapter):
         )
 
         category = self._resolve_category(order.symbol)
+        venue_symbol = self._venue_symbol(order.symbol)
         bybit_side = "Buy" if order.side == OrderSide.BUY else "Sell"
         bybit_order_type, extra_kwargs = self._map_order_type(order)
 
         def _submit():
             return self._session.place_order(
                 category=category,
-                symbol=order.symbol,
+                symbol=venue_symbol,
                 side=bybit_side,
                 orderType=bybit_order_type,
                 qty=str(order.quantity),
@@ -209,11 +220,12 @@ class BybitAdapter(BrokerAdapter):
             raise ValueError(f"Unsupported timeframe for Bybit: {timeframe}")
 
         category = self._resolve_category(symbol)
+        venue_symbol = self._venue_symbol(symbol)
 
         def _fetch():
             return self._session.get_kline(
                 category=category,
-                symbol=symbol,
+                symbol=venue_symbol,
                 interval=bybit_interval,
                 limit=limit,
             )
@@ -320,18 +332,33 @@ class BybitAdapter(BrokerAdapter):
         }
         return mapping.get(tif, "GTC")
 
-    @staticmethod
-    def _resolve_category(symbol: str) -> str:
+    def _resolve_category(self, symbol: str) -> str:
+        """Bybit's product bucket for `symbol`, from the instrument catalog.
+
+        Bybit spells spot and perp identically (both "BTCUSDT"), so the symbol string
+        alone cannot say which product an order is for — the catalog can, because spot
+        and perp are separate instruments there (BTCUSDT vs BTCUSDT.P).
+
+        Unknown symbols fall back to "linear" to preserve the previous behaviour rather
+        than break an in-flight order; the warning is the signal to seed the instrument.
         """
-        Heuristic category resolver.
-        Symbols ending in USDT that are perp futures are treated as linear.
-        Plain spot pairs are treated as spot.
-        Callers can override by passing category explicitly where needed.
-        """
-        # Bybit USDT perpetuals share the same symbol format as spot (e.g. BTCUSDT).
-        # Without additional metadata we default to "linear" (futures) so that
-        # get_positions works correctly; strategies should set market_type explicitly.
-        return _CATEGORY_LINEAR
+        try:
+            category = self._instruments.category_for(symbol, BrokerID.BYBIT)
+        except InstrumentError:
+            category = ""
+        if not category:
+            self._log.warning("bybit.category.unresolved", symbol=symbol,
+                              fallback=_CATEGORY_LINEAR)
+            return _CATEGORY_LINEAR
+        return category
+
+    def _venue_symbol(self, symbol: str) -> str:
+        """Bybit's own notation for `symbol`, or `symbol` unchanged if unseeded."""
+        try:
+            return self._instruments.symbol_for(symbol, BrokerID.BYBIT)
+        except InstrumentError:
+            self._log.warning("bybit.symbol.unresolved", symbol=symbol)
+            return symbol
 
     @staticmethod
     def _assert_ok(response: dict, context: str) -> None:

@@ -136,6 +136,14 @@ CAVEAT_TEXT = (
 
 
 class CycleParamsSchema(BaseModel):
+    """Halving-clock knobs shared by every cycle_* arm.
+
+    `timing_mode` picks HOW cycle position becomes behavior:
+    - "gaussian" — smooth bell curves around the predicted top/bottom (sigma_* set their width);
+    - "windows"  — discrete day windows: nothing before the start day, full intensity through the
+      end day, nothing after. The *_day fields are days since the most recent halving; leave one
+      null to derive it from the gaussian params (top/bottom +/- sigma).
+    """
     days_to_top: int = Field(535, ge=200, le=900)
     top_to_bottom: int = Field(380, ge=200, le=900)
     sigma_top: float = Field(90.0, gt=0, le=400)
@@ -144,10 +152,16 @@ class CycleParamsSchema(BaseModel):
     rolling_window: int = Field(90, ge=7, le=400)
     k_buy: float = Field(0.5, gt=0, le=1)
     k_sell: float = Field(0.35, gt=0, le=1)
+    timing_mode: Literal["gaussian", "windows"] = "gaussian"
+    sell_start_day: Optional[int] = Field(None, ge=0, le=1457)
+    sell_end_day: Optional[int] = Field(None, ge=0, le=1457)
+    buy_start_day: Optional[int] = Field(None, ge=0, le=1457)
+    buy_end_day: Optional[int] = Field(None, ge=0, le=1457)
+    ramp_days: int = Field(0, ge=0, le=200)
 
 
 class HunterParamsSchema(BaseModel):
-    """Tunable knobs for the cycle_hunter arm (sell_cap can now go all the way to 1.0)."""
+    """Tunable knobs for the cycle_ath_trim_rebuy arm (sell_cap can now go all the way to 1.0)."""
     sell_cap_frac: float = Field(0.30, ge=0, le=1)
     cooldown_days: int = Field(90, ge=0, le=365)
     reentry_within: float = Field(0.15, ge=0, le=1)
@@ -155,13 +169,13 @@ class HunterParamsSchema(BaseModel):
 
 
 class RotationParamsSchema(BaseModel):
-    """Tunable knobs for the cycle_rotation_v2 / cycle_rotation_auto arms."""
+    """Tunable knobs for the cycle_selltop_redeploy_manual / _auto arms."""
     sell_fraction_at_ath: float = Field(0.70, ge=0, le=1)
     ath_band: float = Field(0.08, gt=0, le=0.5)
     sell_intensity_hi: float = Field(0.85, ge=0, le=1)
     k_sell_daily: float = Field(0.10, gt=0, le=1)
     sell_sharpness: float = Field(4.0, ge=1, le=12)
-    expected_bear_drop: float = Field(0.70, gt=0, lt=1)   # manual (v2) arm
+    expected_bear_drop: float = Field(0.70, gt=0, lt=1)   # manual arm
     buy_zone_top_frac: float = Field(0.50, ge=0, le=1)
     k_deploy_daily: float = Field(0.10, gt=0, le=1)
     deploy_floor: float = Field(0.30, ge=0, le=1)
@@ -214,7 +228,7 @@ class DcaCompareResponse(BaseModel):
     capital_model: str
     caveat: str
     cycle_markers: List[CycleMarker]
-    arms: Dict[str, ArmResultResponse]   # keys: flat_dca, smart_accumulate, full_rotation
+    arms: Dict[str, ArmResultResponse]   # keys: dca_flat, dca_dip_weighted_cycle, cycle_buydip_selltop, ...
 
 
 class StrategyParamDef(BaseModel):

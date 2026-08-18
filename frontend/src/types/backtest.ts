@@ -72,6 +72,8 @@ export type MonteCarloMethod = 'bootstrap' | 'shuffle'
 
 // --- DCA vs halving-cycle-grid comparison (mirrors backend DcaCompareResponse) ---
 
+import type { CycleParams, HunterParams, RotationParams } from '@/lib/dcaCompareParams'
+
 export interface DcaCompareRequest {
   symbol: string
   timeframe: string
@@ -83,6 +85,10 @@ export interface DcaCompareRequest {
   lump_sum_budget?: number
   commission_pct?: number
   slippage_pct?: number
+  // Optional per-arm tuning blocks (backend applies defaults when omitted).
+  cycle?: CycleParams
+  hunter?: HunterParams
+  rotation?: RotationParams
 }
 
 export interface DcaArmResult {

@@ -14,6 +14,8 @@ import { TradeTable } from '@/components/backtest/TradeTable'
 import { BacktestChart } from '@/components/backtest/BacktestChart'
 import { MonteCarloPanel } from '@/components/backtest/MonteCarloPanel'
 import { DcaComparePanel } from '@/components/backtest/DcaComparePanel'
+import { DcaCompareControls } from '@/components/backtest/DcaCompareControls'
+import { loadDcaParams, saveDcaParams } from '@/lib/dcaCompareParams'
 
 const TIMEFRAMES = ['1m', '5m', '15m', '1h', '4h', '1d'] as const
 const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT']
@@ -43,6 +45,8 @@ export function Backtests() {
   const [lastReq, setLastReq] = useState<BacktestRequest | null>(null)
   const [mcResult, setMcResult] = useState<MonteCarloResponse | null>(null)
   const [dcaResult, setDcaResult] = useState<DcaCompareResponse | null>(null)
+  // Tunable per-arm params for the DCA comparison, persisted across reloads.
+  const [dcaParams, setDcaParams] = useState(loadDcaParams)
 
   const { data: available } = useQuery({
     queryKey: ['backtests', 'strategies'],
@@ -78,10 +82,14 @@ export function Backtests() {
       end: endDate ? new Date(endDate).toISOString() : undefined,
       capital_model: 'contributions', contribution_amount: 100, contribution_interval_days: 7,
       commission_pct: form.commission_pct, slippage_pct: form.slippage_pct ?? 0.0005,
+      cycle: dcaParams.cycle, hunter: dcaParams.hunter, rotation: dcaParams.rotation,
     }),
     onSuccess: (data) => setDcaResult(data),
     onError: (err) => toastError(err),
   })
+
+  // Persist tuning across reloads so an experiment survives a refresh.
+  useEffect(() => saveDcaParams(dcaParams), [dcaParams])
 
   // Pre-fill SL/TP from the user's risk defaults (adjustable per run).
   const { data: riskProfile } = useQuery({ queryKey: ['risk-profile'], queryFn: api.settings.getRisk })
@@ -430,20 +438,15 @@ export function Backtests() {
                 </button>
               )}
 
-              {/* DCA vs halving-cycle-grid comparison — opt-in, BTC-focused. */}
-              {dcaResult ? (
-                <DcaComparePanel result={dcaResult} />
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => dcaCompare.mutate()}
-                  disabled={dcaCompare.isPending}
-                  className="flex items-center justify-center gap-2 self-start bg-surface border border-border rounded-lg px-4 py-2.5 text-sm font-medium hover:border-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                >
-                  <TrendingUp size={14} />
-                  {dcaCompare.isPending ? t('backtests.dca.running') : t('backtests.dca.run')}
-                </button>
-              )}
+              {/* DCA vs halving-cycle-grid comparison — opt-in, BTC-focused. Controls stay visible so
+                  the user can re-tune params and re-run; results render below when present. */}
+              <DcaCompareControls
+                params={dcaParams}
+                onChange={setDcaParams}
+                onRun={() => dcaCompare.mutate()}
+                isPending={dcaCompare.isPending}
+              />
+              {dcaResult && <DcaComparePanel result={dcaResult} />}
             </>
           )}
         </div>

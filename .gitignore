@@ -51,17 +51,16 @@ next-env.d.ts
 ./*.txt
 
 
-# Claudio y mios
-/PROFITPILOT_PROJECT_INSTRUCTIONS.md
-/Architecture notes.txt
-/CLAUDE.md
-/.claude/settings.json 
-/design-system/**
-PROFITPILOT_PROJECT_INSTRUCTIONS.md
-CLAUDE.md
-.claude/settings.json
-/.superpowers/**
+# Claudio y mios 
+Architecture notes.txt 
+design-system/**
+PROFITPILOT_PROJECT_INSTRUCTIONS.md 
+.claude/*
+.superpowers/**
 **/profitpilot.db
 Architecture notes.txt
 TODO.md
 docs/*
+graphify-out/*
+CLAUDE.md
+scratchpad/*

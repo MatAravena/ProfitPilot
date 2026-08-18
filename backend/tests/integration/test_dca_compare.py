@@ -46,8 +46,8 @@ async def test_dca_compare_returns_all_arms(client):
     assert resp.status_code == 200
     body = resp.json()
     assert set(body["arms"]) == {
-        "flat_dca", "smart_accumulate", "full_rotation", "cycle_hunter", "accumulator_grid",
-        "cycle_rotation_v2", "cycle_rotation_auto",
+        "dca_flat", "dca_dip_weighted_cycle", "cycle_buydip_selltop", "cycle_ath_trim_rebuy",
+        "dip_deploy_trim", "cycle_selltop_redeploy_manual", "cycle_selltop_redeploy_auto",
     }
     assert body["caveat"]
     for arm in body["arms"].values():
@@ -62,12 +62,12 @@ async def test_dca_compare_same_contributions_across_arms(client):
         resp = await client.post("/api/v1/backtests/dca-compare", json=_body())
     arms = resp.json()["arms"]
     contribs = {name: a["total_contributed"] for name, a in arms.items()}
-    assert contribs["flat_dca"] == pytest.approx(contribs["smart_accumulate"])
-    assert contribs["flat_dca"] == pytest.approx(contribs["full_rotation"])
-    assert contribs["flat_dca"] == pytest.approx(contribs["cycle_hunter"])
-    assert contribs["flat_dca"] == pytest.approx(contribs["accumulator_grid"])
-    assert contribs["flat_dca"] == pytest.approx(contribs["cycle_rotation_v2"])
-    assert contribs["flat_dca"] == pytest.approx(contribs["cycle_rotation_auto"])
+    assert contribs["dca_flat"] == pytest.approx(contribs["dca_dip_weighted_cycle"])
+    assert contribs["dca_flat"] == pytest.approx(contribs["cycle_buydip_selltop"])
+    assert contribs["dca_flat"] == pytest.approx(contribs["cycle_ath_trim_rebuy"])
+    assert contribs["dca_flat"] == pytest.approx(contribs["dip_deploy_trim"])
+    assert contribs["dca_flat"] == pytest.approx(contribs["cycle_selltop_redeploy_manual"])
+    assert contribs["dca_flat"] == pytest.approx(contribs["cycle_selltop_redeploy_auto"])
 
 
 @pytest.mark.asyncio
@@ -88,9 +88,33 @@ async def test_dca_compare_rotation_params_flow_through(client):
                                     json=_body(rotation={"sell_fraction_at_ath": 0.2}))
         tuned = await client.post("/api/v1/backtests/dca-compare",
                                   json=_body(rotation={"sell_fraction_at_ath": 1.0}))
-    a = default.json()["arms"]["cycle_rotation_v2"]["final_value"]
-    b = tuned.json()["arms"]["cycle_rotation_v2"]["final_value"]
+    a = default.json()["arms"]["cycle_selltop_redeploy_manual"]["final_value"]
+    b = tuned.json()["arms"]["cycle_selltop_redeploy_manual"]["final_value"]
     assert a != b
+
+
+@pytest.mark.asyncio
+async def test_dca_compare_window_timing_flows_through(client):
+    """Switching the cycle clock to discrete windows must reach the policies and change the run."""
+    with patch("app.services.backtest_service.fetch_ohlcv",
+               new=AsyncMock(return_value=_blowoff_to_top_bars())):
+        gaussian = await client.post("/api/v1/backtests/dca-compare", json=_body())
+        windows = await client.post("/api/v1/backtests/dca-compare", json=_body(
+            cycle={"timing_mode": "windows", "sell_start_day": 525, "sell_end_day": 600},
+        ))
+    assert windows.status_code == 200
+    a = gaussian.json()["arms"]["cycle_selltop_redeploy_manual"]["final_value"]
+    b = windows.json()["arms"]["cycle_selltop_redeploy_manual"]["final_value"]
+    assert a != b
+
+
+@pytest.mark.asyncio
+async def test_dca_compare_rejects_an_unknown_timing_mode(client):
+    with patch("app.services.backtest_service.fetch_ohlcv",
+               new=AsyncMock(return_value=_btc_bars(400))):
+        resp = await client.post("/api/v1/backtests/dca-compare",
+                                 json=_body(cycle={"timing_mode": "sometimes"}))
+    assert resp.status_code == 422
 
 
 @pytest.mark.asyncio

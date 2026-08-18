@@ -9,6 +9,7 @@ import structlog
 from app.core.enums import BrokerID, MarketType, OrderSide, OrderStatus, OrderType
 from app.core.types import Account, Fill, Order, OrderResult, Position, Tick
 from app.domain.broker.base import BrokerAdapter
+from app.domain.instruments import INSTRUMENTS, InstrumentCatalog, InstrumentError
 
 logger = structlog.get_logger(__name__)
 
@@ -27,7 +28,13 @@ class AlpacaAdapter(BrokerAdapter):
     Requires: alpaca-py (pip install alpaca-py)
     """
 
-    def __init__(self, api_key: str, secret_key: str, paper_mode: bool = True):
+    def __init__(
+        self,
+        api_key: str,
+        secret_key: str,
+        paper_mode: bool = True,
+        instruments: InstrumentCatalog = INSTRUMENTS,
+    ):
         super().__init__(
             broker_id=BrokerID.ALPACA,
             api_key=api_key,
@@ -38,6 +45,30 @@ class AlpacaAdapter(BrokerAdapter):
         self._base_url = _PAPER_BASE if paper_mode else _LIVE_BASE
         self._trading_client = None
         self._data_client = None
+        # Injected abstraction, not the concrete registry — see BybitAdapter.
+        self._instruments = instruments
+
+    # ── Instrument resolution ──────────────────────────────────────────────────
+
+    def _market_type(self, symbol: str) -> MarketType:
+        """Crypto or stock, from the catalog rather than the symbol's shape.
+
+        `"/" in symbol` only worked because Alpaca happens to spell crypto BTC/USD;
+        it misreads any canonical symbol (BTCUSDT) and every venue that disagrees.
+        Unseeded symbols fall back to the old shape heuristic so nothing regresses.
+        """
+        instrument = self._instruments.get(symbol)
+        if instrument is not None:
+            return instrument.market_type
+        return MarketType.CRYPTO if "/" in symbol else MarketType.STOCK
+
+    def _venue_symbol(self, symbol: str) -> str:
+        """Alpaca's own notation, e.g. BTCUSDT → BTC/USD."""
+        try:
+            return self._instruments.symbol_for(symbol, BrokerID.ALPACA)
+        except InstrumentError:
+            self._log.warning("alpaca.symbol.unresolved", symbol=symbol)
+            return symbol
 
     # ── Lifecycle ──────────────────────────────────────────────────────────────
 
@@ -82,10 +113,11 @@ class AlpacaAdapter(BrokerAdapter):
 
         side = AlpSide.BUY if order.side == OrderSide.BUY else AlpSide.SELL
         tif  = TimeInForce.DAY
+        venue_symbol = self._venue_symbol(order.symbol)
 
         if order.order_type == OrderType.MARKET:
             request = MarketOrderRequest(
-                symbol=order.symbol,
+                symbol=venue_symbol,
                 qty=order.quantity,
                 side=side,
                 time_in_force=tif,
@@ -94,7 +126,7 @@ class AlpacaAdapter(BrokerAdapter):
             if order.limit_price is None:
                 raise ValueError("limit_price required for LIMIT orders")
             request = LimitOrderRequest(
-                symbol=order.symbol,
+                symbol=venue_symbol,
                 qty=order.quantity,
                 side=side,
                 time_in_force=tif,
@@ -163,22 +195,23 @@ class AlpacaAdapter(BrokerAdapter):
         if alpaca_tf is None:
             raise ValueError(f"Unsupported timeframe for Alpaca: {timeframe}")
 
-        is_crypto = "/" in symbol  # Alpaca crypto symbols use BTC/USD format
-        if is_crypto:
-            request = CryptoBarsRequest(symbol_or_symbols=symbol, timeframe=alpaca_tf, limit=limit)
+        venue_symbol = self._venue_symbol(symbol)
+        if self._market_type(symbol) is MarketType.CRYPTO:
+            request = CryptoBarsRequest(symbol_or_symbols=venue_symbol, timeframe=alpaca_tf, limit=limit)
             bars = await asyncio.get_event_loop().run_in_executor(
                 None, lambda: self._crypto_data_client.get_crypto_bars(request)
             )
         else:
-            request = StockBarsRequest(symbol_or_symbols=symbol, timeframe=alpaca_tf, limit=limit)
+            request = StockBarsRequest(symbol_or_symbols=venue_symbol, timeframe=alpaca_tf, limit=limit)
             bars = await asyncio.get_event_loop().run_in_executor(
                 None, lambda: self._stock_data_client.get_stock_bars(request)
             )
 
+        # Alpaca keys the response by the symbol it was asked for, not ours.
         return [
             {"timestamp": b.timestamp, "open": b.open, "high": b.high,
              "low": b.low, "close": b.close, "volume": b.volume}
-            for b in bars[symbol]
+            for b in bars[venue_symbol]
         ]
 
     async def stream_ticks(self, symbol: str) -> AsyncGenerator[Tick, None]:
@@ -197,7 +230,7 @@ class AlpacaAdapter(BrokerAdapter):
         qty = float(raw.qty)
         return Position(
             symbol=raw.symbol,
-            market_type=MarketType.CRYPTO if "/" in raw.symbol else MarketType.STOCK,
+            market_type=self._market_type(raw.symbol),
             broker_id=self.broker_id.value,
             quantity=qty,
             avg_entry_price=float(raw.avg_entry_price),

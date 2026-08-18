@@ -170,13 +170,67 @@
       "dryPowder": "Dry powder",
       "arm": {
         "label": "Strategy",
-        "flat_dca": "Flat DCA",
-        "smart_accumulate": "Cycle accumulate",
-        "full_rotation": "Cycle rotation",
-        "cycle_hunter": "Cycle hunter",
-        "accumulator_grid": "Accumulator grid",
-        "cycle_rotation_v2": "Cycle rotation v2",
-        "cycle_rotation_auto": "Cycle rotation (auto)"
+        "dca_flat": "Flat DCA (benchmark)",
+        "dca_dip_weighted_cycle": "Cycle-weighted dip buying",
+        "cycle_buydip_selltop": "Cycle buy-dip / sell-top",
+        "cycle_ath_trim_rebuy": "Cycle ATH trim & rebuy",
+        "dip_deploy_trim": "Dip-deploy + trim",
+        "cycle_selltop_redeploy_manual": "Cycle sell-top redeploy (manual)",
+        "cycle_selltop_redeploy_auto": "Cycle sell-top redeploy (auto)"
+      },
+      "params": {
+        "tune": "Tune parameters",
+        "preset": "Preset",
+        "reset": "Reset to defaults",
+        "presetName": {
+          "custom": "Custom",
+          "default": "Default",
+          "keepCore": "Keep core (light trim)",
+          "sellEverything": "Sell everything at top",
+          "aggressiveDip": "Aggressive dip buyer",
+          "halvingWindows": "Halving windows (hard dates)"
+        },
+        "group": {
+          "cycle": "Cycle clock (shared)",
+          "hunter": "ATH trim & rebuy",
+          "rotation": "Sell-top redeploy"
+        },
+        "field": {
+          "days_to_top": "Days to top",
+          "top_to_bottom": "Top to bottom",
+          "sigma_top": "Sigma top",
+          "sigma_bottom": "Sigma bottom",
+          "base_buy": "Base buy",
+          "rolling_window": "Rolling window",
+          "k_buy": "Buy rate",
+          "k_sell": "Sell rate",
+          "sell_cap_frac": "Sell cap fraction",
+          "cooldown_days": "Cooldown days",
+          "reentry_within": "Re-entry within",
+          "k_bear_daily": "Bear deploy rate",
+          "sell_fraction_at_ath": "Sell fraction at ATH",
+          "ath_band": "ATH band",
+          "sell_intensity_hi": "Sell intensity gate",
+          "k_sell_daily": "Sell rate (daily)",
+          "sell_sharpness": "Sell sharpness",
+          "expected_bear_drop": "Expected bear drop",
+          "buy_zone_top_frac": "Buy zone top fraction",
+          "k_deploy_daily": "Deploy rate (daily)",
+          "deploy_floor": "Deploy floor",
+          "reentry_gain": "Re-entry gain",
+          "caution_margin": "Caution margin",
+          "timing_mode": "Timing mode",
+          "sell_start_day": "Start selling (day after halving)",
+          "sell_end_day": "Stop selling (day after halving)",
+          "buy_start_day": "Start buying (day after halving)",
+          "buy_end_day": "Stop buying (day after halving)",
+          "ramp_days": "Ramp days (0 = hard on/off)"
+        },
+        "auto": "auto",
+        "timingMode": {
+          "gaussian": "Gaussian curves",
+          "windows": "Discrete windows"
+        }
       }
     }
   },

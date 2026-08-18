@@ -100,7 +100,7 @@ def test_cycle_policy_buys_more_near_predicted_bottom_than_top():
     assert bottom_res.units_accumulated > top_res.units_accumulated
 
 
-def test_full_rotation_sells_into_top_and_realizes_pnl():
+def test_cycle_buydip_selltop_sells_into_top_and_realizes_pnl():
     # Accumulate cheap, then a rising price into the predicted-top window should trigger sells.
     p = CycleParams()
     halving = date(2024, 4, 20)
@@ -117,7 +117,7 @@ def test_full_rotation_sells_into_top_and_realizes_pnl():
 
 # --------------------------------------------------------------------------- #
 # Ledger cost-basis accounting (moving-average) — regression for the inflated
-# realized_pnl / avg_cost_basis bug that made full_rotation nonsensical.
+# realized_pnl / avg_cost_basis bug that made the selling arms nonsensical.
 # --------------------------------------------------------------------------- #
 
 def test_sell_realizes_pnl_at_moving_avg_cost():
@@ -454,6 +454,47 @@ def test_rotation_net_accumulates_vs_hold_when_timing_is_right():
     hold = run_accumulation(bars, FlatDcaPolicy(), **_ROT_COMMON)
     # Selling ~everything near 120k and rebuying in the 45-90k zone must net MORE coins than holding.
     assert rot.units_accumulated > hold.units_accumulated
+
+
+def test_rotation_in_windows_mode_never_sells_before_the_sell_start_day():
+    """Discrete-window timing: the arm must be completely inert before day A of the cycle, then
+    distribute once the window opens — the literal 'start selling N days after the halving'."""
+    bars = _sell_high_buy_low_bars()
+    halving = date(2024, 4, 20)
+    sell_start = 525   # inside the blow-off, 10 days before the gaussian top (535)
+    rp = CycleRotationParams()
+
+    def sold_split(policy):
+        rows = _drive_rotation(bars, policy)
+        before = sum(r["sell_units"] for r in rows
+                     if (bars[r["i"]].timestamp.date() - halving).days < sell_start)
+        after = sum(r["sell_units"] for r in rows
+                    if (bars[r["i"]].timestamp.date() - halving).days >= sell_start)
+        return before, after
+
+    win_before, win_after = sold_split(CycleRotationPolicy(
+        CycleParams(timing_mode="windows", sell_start_day=sell_start, sell_end_day=600),
+        rp, _const_drop(0.50)))
+    gauss_before, _ = sold_split(CycleRotationPolicy(CycleParams(), rp, _const_drop(0.50)))
+
+    assert win_before == 0.0      # hard off before day A...
+    assert win_after > 0.0        # ...and it does fire once the window opens
+    assert gauss_before > 0.0     # the gaussian curve *does* sell early — the window is what stops it
+
+
+def test_windows_and_gaussian_modes_produce_different_runs():
+    """Guard against the mode being silently ignored anywhere in the wiring."""
+    bars = _sell_high_buy_low_bars()
+    rp = CycleRotationParams()
+    gauss = run_accumulation(bars, CycleRotationPolicy(CycleParams(), rp, _const_drop(0.50)),
+                             **_ROT_COMMON)
+    win = run_accumulation(
+        bars,
+        CycleRotationPolicy(CycleParams(timing_mode="windows", sell_start_day=560,
+                                        sell_end_day=640), rp, _const_drop(0.50)),
+        **_ROT_COMMON,
+    )
+    assert win.units_accumulated != pytest.approx(gauss.units_accumulated)
 
 
 def test_rotation_respects_sell_fraction_cap():

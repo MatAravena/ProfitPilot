@@ -8,13 +8,13 @@ import type { DcaCompareResponse } from '@/types/backtest'
 // Preferred display order + colors. The chart/table render only the arms actually present in
 // the response, so adding or removing a backend arm doesn't break the panel.
 const ARM_ORDER = [
-  'flat_dca', 'smart_accumulate', 'full_rotation', 'cycle_hunter', 'accumulator_grid',
-  'cycle_rotation_v2', 'cycle_rotation_auto',
+  'dca_flat', 'dca_dip_weighted_cycle', 'cycle_buydip_selltop', 'cycle_ath_trim_rebuy',
+  'dip_deploy_trim', 'cycle_selltop_redeploy_manual', 'cycle_selltop_redeploy_auto',
 ] as const
 const ARM_COLOR: Record<string, string> = {
-  flat_dca: '#64748B', smart_accumulate: '#2563EB', full_rotation: '#f59e0b',
-  cycle_hunter: '#a855f7', accumulator_grid: '#10b981',
-  cycle_rotation_v2: '#ec4899', cycle_rotation_auto: '#06b6d4',
+  dca_flat: '#64748B', dca_dip_weighted_cycle: '#2563EB', cycle_buydip_selltop: '#f59e0b',
+  cycle_ath_trim_rebuy: '#a855f7', dip_deploy_trim: '#10b981',
+  cycle_selltop_redeploy_manual: '#ec4899', cycle_selltop_redeploy_auto: '#06b6d4',
 }
 
 export function DcaComparePanel({ result }: { result: DcaCompareResponse }) {

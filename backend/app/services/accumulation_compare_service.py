@@ -31,7 +31,7 @@ class DcaCompareBundle:
 
 
 class AccumulationCompareService:
-    """Runs flat DCA, cycle-weighted accumulation, and full rotation over identical BTC data.
+    """Runs the DCA / cycle-timing accumulation arms over identical BTC data.
 
     Reuses BacktestService for the OHLCV fetch/cache path (single source of truth for market
     data). Domain math stays pure; this layer owns data access + config translation.
@@ -63,6 +63,12 @@ class AccumulationCompareService:
             sigma_top=req.cycle.sigma_top,
             sigma_bottom=req.cycle.sigma_bottom,
             base_buy=req.cycle.base_buy,
+            timing_mode=req.cycle.timing_mode,
+            sell_start_day=req.cycle.sell_start_day,
+            sell_end_day=req.cycle.sell_end_day,
+            buy_start_day=req.cycle.buy_start_day,
+            buy_end_day=req.cycle.buy_end_day,
+            ramp_days=req.cycle.ramp_days,
         )
         bars_per_year = BacktestEngine._infer_bars_per_year(timeframe)  # noqa: SLF001
 
@@ -89,15 +95,20 @@ class AccumulationCompareService:
             bars_per_year=bars_per_year,
         )
 
+        # NOTE: arm keys name each strategy by its *mechanics*, on purpose (renamed 2026-08-01).
+        # `cycle_*` = timing is driven by the halving-cycle thesis (overfit-prone: only ~3 completed
+        # cycles). `dca_*`/`dip_*` = plain accumulation mechanics with NO halving input. None of these
+        # is a fixed-capital rebalancer — they are contribution/lump-sum-fed accumulators, so the
+        # Shannon's-demon "rebalancing bonus" is NOT what drives them (see scratchpad rebalance spike).
         arms: Dict[str, ArmResult] = {
-            "flat_dca": run_accumulation(bars, FlatDcaPolicy(), **common),
-            "smart_accumulate": run_accumulation(
+            "dca_flat": run_accumulation(bars, FlatDcaPolicy(), **common),
+            "dca_dip_weighted_cycle": run_accumulation(
                 bars,
                 CycleWeightedPolicy(params, distribute=False, k_buy=req.cycle.k_buy,
                                     k_sell=req.cycle.k_sell, rolling_window=req.cycle.rolling_window),
                 **common,
             ),
-            "full_rotation": run_accumulation(
+            "cycle_buydip_selltop": run_accumulation(
                 bars,
                 CycleWeightedPolicy(params, distribute=True, k_buy=req.cycle.k_buy,
                                     k_sell=req.cycle.k_sell, rolling_window=req.cycle.rolling_window),
@@ -105,7 +116,7 @@ class AccumulationCompareService:
             ),
             # ATH-aware rotation state machine (sell near top -> ~3-month cooldown ->
             # accumulate the decline). sell_cap tunable up to 1.0 via the request.
-            "cycle_hunter": run_accumulation(
+            "cycle_ath_trim_rebuy": run_accumulation(
                 bars,
                 CycleHunterPolicy(params, CycleHunterParams(
                     sell_cap_frac=req.hunter.sell_cap_frac,
@@ -117,15 +128,16 @@ class AccumulationCompareService:
             ),
             # Buy-the-dip accumulation grid: deploy reserve into drawdowns, light trend-gated
             # profit trims, ratcheting core floor. Edge is on the buy side, not timing tops.
-            "accumulator_grid": run_accumulation(
+            # (No halving input — the one arm that is NOT a cycle bet, hence no `cycle_` tag.)
+            "dip_deploy_trim": run_accumulation(
                 bars, AccumulatorGridPolicy(AccumulatorGridParams()), **common,
             ),
             # Sell most near a confirmed ATH, then deploy the war chest across the lower half of
-            # the drawdown. v2 = you set expected_bear_drop; auto = derived from past cycles.
-            "cycle_rotation_v2": run_accumulation(
+            # the drawdown. manual = you set expected_bear_drop; auto = derived from past cycles.
+            "cycle_selltop_redeploy_manual": run_accumulation(
                 bars, CycleRotationPolicy(params, rotation_params), **common,
             ),
-            "cycle_rotation_auto": run_accumulation(
+            "cycle_selltop_redeploy_auto": run_accumulation(
                 bars,
                 CycleRotationPolicy(
                     params, rotation_params,

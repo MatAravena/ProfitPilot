@@ -48,6 +48,7 @@ class Settings(BaseSettings):
 
     # LLM Enrichment (optional layer — all empty by default)
     ANTHROPIC_API_KEY: str = ""
+    ANTHROPIC_MODEL: str = "claude-sonnet-5"
     OPENAI_API_KEY: str = ""
     OLLAMA_BASE_URL: str = "http://localhost:11434"
 

@@ -165,13 +165,67 @@
       "dryPowder": "Efectivo disponible",
       "arm": {
         "label": "Estrategia",
-        "flat_dca": "DCA plano",
-        "smart_accumulate": "Acumulación de ciclo",
-        "full_rotation": "Rotación de ciclo",
-        "cycle_hunter": "Cazador de ciclo",
-        "accumulator_grid": "Grid acumulador",
-        "cycle_rotation_v2": "Rotación de ciclo v2",
-        "cycle_rotation_auto": "Rotación de ciclo (auto)"
+        "dca_flat": "DCA plano (referencia)",
+        "dca_dip_weighted_cycle": "Compra en caídas ponderada por ciclo",
+        "cycle_buydip_selltop": "Ciclo compra-caída / vende-techo",
+        "cycle_ath_trim_rebuy": "Ciclo recorte en ATH y recompra",
+        "dip_deploy_trim": "Despliegue en caídas + recorte",
+        "cycle_selltop_redeploy_manual": "Ciclo vende-techo redespliegue (manual)",
+        "cycle_selltop_redeploy_auto": "Ciclo vende-techo redespliegue (auto)"
+      },
+      "params": {
+        "tune": "Ajustar parámetros",
+        "preset": "Preajuste",
+        "reset": "Restablecer valores",
+        "presetName": {
+          "custom": "Personalizado",
+          "default": "Predeterminado",
+          "keepCore": "Conservar núcleo (recorte leve)",
+          "sellEverything": "Vender todo en el techo",
+          "aggressiveDip": "Comprador agresivo de caídas",
+          "halvingWindows": "Ventanas del halving (fechas fijas)"
+        },
+        "group": {
+          "cycle": "Reloj de ciclo (común)",
+          "hunter": "Recorte y recompra en ATH",
+          "rotation": "Redespliegue vende-techo"
+        },
+        "field": {
+          "days_to_top": "Días al techo",
+          "top_to_bottom": "Techo a fondo",
+          "sigma_top": "Sigma techo",
+          "sigma_bottom": "Sigma fondo",
+          "base_buy": "Compra base",
+          "rolling_window": "Ventana móvil",
+          "k_buy": "Tasa de compra",
+          "k_sell": "Tasa de venta",
+          "sell_cap_frac": "Fracción tope de venta",
+          "cooldown_days": "Días de enfriamiento",
+          "reentry_within": "Reingreso dentro de",
+          "k_bear_daily": "Tasa despliegue bajista",
+          "sell_fraction_at_ath": "Fracción vendida en ATH",
+          "ath_band": "Banda ATH",
+          "sell_intensity_hi": "Umbral intensidad venta",
+          "k_sell_daily": "Tasa de venta (diaria)",
+          "sell_sharpness": "Agudeza de venta",
+          "expected_bear_drop": "Caída bajista esperada",
+          "buy_zone_top_frac": "Fracción techo zona compra",
+          "k_deploy_daily": "Tasa despliegue (diaria)",
+          "deploy_floor": "Piso de despliegue",
+          "reentry_gain": "Ganancia de reingreso",
+          "caution_margin": "Margen de cautela",
+          "timing_mode": "Modo de temporización",
+          "sell_start_day": "Empezar a vender (día tras el halving)",
+          "sell_end_day": "Dejar de vender (día tras el halving)",
+          "buy_start_day": "Empezar a comprar (día tras el halving)",
+          "buy_end_day": "Dejar de comprar (día tras el halving)",
+          "ramp_days": "Días de rampa (0 = corte seco)"
+        },
+        "auto": "auto",
+        "timingMode": {
+          "gaussian": "Curvas gaussianas",
+          "windows": "Ventanas discretas"
+        }
       }
     }
   },

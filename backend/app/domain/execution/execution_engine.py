@@ -31,6 +31,14 @@ from app.core.types import (
 from app.domain.broker.base import BrokerAdapter
 from app.domain.execution import position_sizer
 from app.domain.execution.reconcile import CLOSE, OPEN_LONG, OPEN_SHORT, plan_actions
+from app.domain.instruments import (
+    INSTRUMENTS,
+    InstrumentCatalog,
+    InstrumentViolation,
+    conform_order,
+    floor_to_step,
+    round_to_tick,
+)
 from app.domain.risk.risk_manager import RiskManager
 
 logger = structlog.get_logger(__name__)
@@ -57,8 +65,10 @@ class ExecutionOutcome:
 
 
 class ExecutionEngine:
-    def __init__(self, risk_manager: RiskManager):
+    def __init__(self, risk_manager: RiskManager, instruments: InstrumentCatalog = INSTRUMENTS):
         self._risk = risk_manager
+        # Injected abstraction, not the concrete registry — see the broker adapters.
+        self._instruments = instruments
         self._log = logger.bind(component="ExecutionEngine")
 
     async def reconcile_and_execute(
@@ -196,6 +206,61 @@ class ExecutionEngine:
         open_position: bool, risk_check: bool,
         realized_pnl: float = 0.0, close_reason: Optional[str] = None,
     ) -> ExecutionOutcome:
+        # Conform to the instrument's tick/lot grid before anything downstream sees the
+        # order — RiskManager must size-check the quantity that will actually be
+        # submitted, never a pre-rounding one.
+        conformed_qty, conformed_price = qty, latest_close
+        instrument = self._instruments.get(symbol)
+        if instrument is None and open_position:
+            # Unseeded + opening a *new* position: fail loud, per `UnknownInstrument`'s own
+            # contract ("deliberately fatal ... guessing a tick size is how orders get
+            # routed to the wrong product"). An un-vetted symbol must not open a position
+            # sized and rounded on guesses.
+            order = Order(
+                order_id=uuid.uuid4(), strategy_id=strategy_id, broker_id=broker_id,
+                symbol=symbol, side=side, order_type=OrderType.MARKET, quantity=qty,
+                limit_price=latest_close, signal_id=signal_id,
+                metadata={"reason": close_reason} if close_reason else {},
+                created_at=datetime.now(timezone.utc),
+            )
+            reason = (
+                f"Unknown instrument '{symbol}': not in the instrument catalog, refusing "
+                f"to open a position sized on guessed tick/lot. Seed it in "
+                f"app/domain/instruments/seed.py."
+            )
+            self._log.warning("execution.instrument_unknown", symbol=symbol)
+            return ExecutionOutcome(action=ACTION_REJECTED, reason=reason, order=order)
+        elif instrument is None:
+            # Unseeded + closing: pass through unconformed rather than blocking the exit —
+            # a position already held must always be closable, even for a symbol the
+            # catalog has never heard of (it predates the registry, or the seed lagged).
+            self._log.warning("execution.instrument_unseeded_close", symbol=symbol)
+        elif open_position:
+            # Opens are validated and can be rejected — an order too small to be worth
+            # the exchange's minimum should never open a position in the first place.
+            try:
+                conformed_qty, conformed_price = conform_order(
+                    instrument, quantity=qty, price=latest_close, broker=broker_id,
+                )
+            except InstrumentViolation as exc:
+                order = Order(
+                    order_id=uuid.uuid4(), strategy_id=strategy_id, broker_id=broker_id,
+                    symbol=symbol, side=side, order_type=OrderType.MARKET, quantity=qty,
+                    limit_price=latest_close, signal_id=signal_id,
+                    metadata={"reason": close_reason} if close_reason else {},
+                    created_at=datetime.now(timezone.utc),
+                )
+                self._log.warning("execution.instrument_rejected", symbol=symbol,
+                                  rule=exc.rule, error=str(exc))
+                return ExecutionOutcome(action=ACTION_REJECTED, reason=str(exc), order=order)
+        else:
+            # Closes always execute — quantize only, never blocked by a min-size
+            # violation the position may have drifted below (same rule as the risk veto:
+            # a stop-loss/close must never be refused). Same reasoning as the ACTION_REJECTED
+            # path above not applying here.
+            conformed_qty = floor_to_step(qty, instrument.lot_step)
+            conformed_price = round_to_tick(latest_close, instrument.tick_size)
+
         order = Order(
             order_id=uuid.uuid4(),
             strategy_id=strategy_id,
@@ -203,8 +268,8 @@ class ExecutionEngine:
             symbol=symbol,
             side=side,
             order_type=OrderType.MARKET,
-            quantity=qty,
-            limit_price=latest_close,   # reference price so RiskManager can size-check
+            quantity=conformed_qty,
+            limit_price=conformed_price,   # reference price so RiskManager can size-check
             signal_id=signal_id,
             metadata={"reason": close_reason} if close_reason else {},
             created_at=datetime.now(timezone.utc),
@@ -234,8 +299,8 @@ class ExecutionEngine:
                 broker_fill_id=result.broker_order_id,
                 symbol=symbol,
                 side=side,
-                filled_quantity=qty,
-                avg_price=latest_close,
+                filled_quantity=order.quantity,
+                avg_price=order.limit_price,
                 commission=0.0,
                 filled_at=datetime.now(timezone.utc),
             )
