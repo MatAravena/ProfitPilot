@@ -261,7 +261,13 @@
       "noBroker": "Connect a broker first to place orders.",
       "broker": "Broker",
       "symbol": "Symbol",
+      "amountType": {
+        "quantity": "Quantity",
+        "notional": "Amount ($)",
+        "percent": "% of position"
+      },
       "quantity": "Quantity",
+      "amount": "Amount",
       "limitPrice": "Limit Price",
       "buy": "Buy",
       "sell": "Sell",
@@ -308,6 +314,7 @@
       "colStatus": "Status"
     },
     "card": {
+      "delete": "Delete",
       "deleteConfirm": "Delete?",
       "yes": "Yes",
       "no": "No",
@@ -410,6 +417,7 @@
     "loading": "Loading…",
     "noBrokers": "No brokers connected. Add one to start trading.",
     "active": "Active",
+    "disconnect": "Disconnect",
     "form": {
       "title": "Add Broker",
       "broker": "Broker",

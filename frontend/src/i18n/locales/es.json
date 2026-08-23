@@ -256,7 +256,13 @@
       "noBroker": "Conecta un broker primero para colocar órdenes.",
       "broker": "Broker",
       "symbol": "Par",
+      "amountType": {
+        "quantity": "Cantidad",
+        "notional": "Monto ($)",
+        "percent": "% de la posición"
+      },
       "quantity": "Cantidad",
+      "amount": "Monto",
       "limitPrice": "Precio límite",
       "buy": "Comprar",
       "sell": "Vender",
@@ -303,6 +309,7 @@
       "colStatus": "Estado"
     },
     "card": {
+      "delete": "Eliminar",
       "deleteConfirm": "¿Eliminar?",
       "yes": "Sí",
       "no": "No",
@@ -410,6 +417,7 @@
     "loading": "Cargando…",
     "noBrokers": "Sin brokers conectados. Añade uno para empezar a operar.",
     "active": "Activo",
+    "disconnect": "Desconectar",
     "form": {
       "title": "Añadir broker",
       "broker": "Broker",
