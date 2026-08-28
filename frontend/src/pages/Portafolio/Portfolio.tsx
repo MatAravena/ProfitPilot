@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { TrendingUp, TrendingDown, DollarSign, Activity, ArrowUpRight, ArrowDownLeft, CheckCircle, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react'
+import { TrendingUp, TrendingDown, DollarSign, Activity, ArrowUpRight, ArrowDownLeft, CheckCircle, AlertCircle } from 'lucide-react'
 import { usePortfolioStore } from '@/stores/portfolio'
 import { api } from '@/lib/api'
 import { cn, formatCurrency, formatPercent } from '@/lib/utils'
 import type { PlaceOrderPayload } from '@/types'
+import { Select } from '@/components/ui/Select'
+import { PaginationButtons } from '@/components/ui/PaginationButtons'
 import { EquityChart } from '@/components/charts/EquityChart'
+import { Card } from '@/components/ui/Card'
 
 const ORDERS_PAGE_SIZE = 25
 
@@ -14,10 +17,13 @@ const EMPTY_FORM: PlaceOrderPayload = {
   symbol: '',
   side: 'buy',
   order_type: 'market',
+  amount_type: 'quantity',
   quantity: 0,
   limit_price: undefined,
   time_in_force: 'gtc',
 }
+
+const AMOUNT_TYPES = ['quantity', 'notional', 'percent'] as const
 
 export function Portfolio() {
   const { t } = useTranslation()
@@ -51,13 +57,13 @@ export function Portfolio() {
   const ordersTo = Math.min(ordersFrom + ORDERS_PAGE_SIZE - 1, ordersTotal)
   const hasMoreOrders = ordersTo < ordersTotal
 
-  const [selectedBroker, setSelectedBroker] = useState('')
+  const [selectedConnection, setSelectedConnection] = useState('')
   useEffect(() => {
-    if (brokers.length && !selectedBroker) setSelectedBroker(brokers[0].broker_id)
+    if (brokers.length && !selectedConnection) setSelectedConnection(brokers[0].id)
   }, [brokers])
 
   const placeOrder = useMutation({
-    mutationFn: (payload: PlaceOrderPayload) => api.brokers.placeOrder(selectedBroker, payload),
+    mutationFn: (payload: PlaceOrderPayload) => api.brokers.placeOrder(selectedConnection, payload),
     onSuccess: (result) => {
       setSuccessMsg(`Order ${result.broker_order_id} → ${result.status}`)
       setForm(EMPTY_FORM)
@@ -81,7 +87,7 @@ export function Portfolio() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!selectedBroker) return
+    if (!selectedConnection) return
     const payload: PlaceOrderPayload = {
       ...form,
       symbol: form.symbol.toUpperCase(),
@@ -102,7 +108,7 @@ export function Portfolio() {
       {/* KPI cards */}
       <div className="grid grid-cols-3 gap-4">
         {kpis.map(({ label, value, icon: Icon, colored, positive }) => (
-          <div key={label} className="bg-surface border border-border rounded-xl p-5">
+          <Card key={label} className="p-5">
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs text-text-muted font-medium">{label}</span>
               <Icon size={14} className="text-text-muted" strokeWidth={1.5} />
@@ -110,12 +116,12 @@ export function Portfolio() {
             <p className={cn('text-2xl font-bold', colored && (positive ? 'text-success' : 'text-danger'))}>
               {value}
             </p>
-          </div>
+          </Card>
         ))}
       </div>
 
       {/* Equity curve */}
-      <div className="bg-surface border border-border rounded-xl overflow-hidden">
+      <Card className="overflow-hidden">
         <div className="px-4 py-3 border-b border-border flex items-center justify-between">
           <span className="text-sm font-medium">{t('portfolio.equityOver')}</span>
           <span className="text-[11px] text-text-muted">{t('portfolio.snapshots', { count: history.length })}</span>
@@ -128,11 +134,11 @@ export function Portfolio() {
         ) : (
           <EquityChart data={equityData} height={220} />
         )}
-      </div>
+      </Card>
 
       {/* Open positions + Place Order */}
       <div className="grid grid-cols-[1fr_300px] gap-4 items-start">
-        <div className="bg-surface border border-border rounded-xl overflow-hidden">
+        <Card className="overflow-hidden">
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
             <span className="text-sm font-medium">{t('portfolio.openPositions')}</span>
             <span className="text-xs text-text-muted">{t('portfolio.activePositions', { count: positions.length })}</span>
@@ -168,10 +174,10 @@ export function Portfolio() {
               </tbody>
             </table>
           )}
-        </div>
+        </Card>
 
         {/* Place Order panel */}
-        <div className="bg-surface border border-border rounded-xl overflow-hidden">
+        <Card className="overflow-hidden">
           <div className="px-4 py-3 border-b border-border">
             <span className="text-sm font-medium">{t('portfolio.placeOrder.title')}</span>
           </div>
@@ -184,13 +190,13 @@ export function Portfolio() {
             <form onSubmit={handleSubmit} className="p-4 flex flex-col gap-3">
               <div className="flex flex-col gap-1">
                 <label className="text-[11px] text-text-muted font-medium">{t('portfolio.placeOrder.broker')}</label>
-                <select value={selectedBroker} onChange={(e) => setSelectedBroker(e.target.value)} className={inputCls}>
+                <Select value={selectedConnection} onChange={(e) => setSelectedConnection(e.target.value)} className={inputCls}>
                   {brokers.map((b) => (
-                    <option key={b.id} value={b.broker_id}>
+                    <option key={b.id} value={b.id}>
                       {b.label} {b.is_paper ? '(paper)' : '(live)'}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
 
               <div className="flex flex-col gap-1">
@@ -239,10 +245,29 @@ export function Portfolio() {
                 ))}
               </div>
 
+              <div className="grid grid-cols-3 gap-1.5">
+                {AMOUNT_TYPES.map((amountT) => (
+                  <button
+                    key={amountT} type="button" onClick={() => setForm((f) => ({ ...f, amount_type: amountT }))}
+                    className={cn(
+                      'py-1.5 rounded-lg text-[11px] font-medium transition-colors cursor-pointer',
+                      form.amount_type === amountT
+                        ? 'bg-primary/20 text-primary border border-primary/40'
+                        : 'bg-surface-2 text-text-muted hover:text-text',
+                    )}
+                  >
+                    {t(`portfolio.placeOrder.amountType.${amountT}`)}
+                  </button>
+                ))}
+              </div>
+
               <div className="flex flex-col gap-1">
-                <label className="text-[11px] text-text-muted font-medium">{t('portfolio.placeOrder.quantity')}</label>
+                <label className="text-[11px] text-text-muted font-medium">
+                  {t(form.amount_type === 'quantity' ? 'portfolio.placeOrder.quantity' : 'portfolio.placeOrder.amount')}
+                </label>
                 <input
-                  type="number" min={0} step="any" placeholder="0.001"
+                  type="number" min={0} max={form.amount_type === 'percent' ? 100 : undefined} step="any"
+                  placeholder={form.amount_type === 'quantity' ? '0.001' : form.amount_type === 'notional' ? '100' : '50'}
                   value={form.quantity || ''}
                   onChange={(e) => setForm((f) => ({ ...f, quantity: parseFloat(e.target.value) || 0 }))}
                   className={inputCls} required
@@ -289,11 +314,11 @@ export function Portfolio() {
               </button>
             </form>
           )}
-        </div>
+        </Card>
       </div>
 
       {/* Order history */}
-      <div className="bg-surface border border-border rounded-xl overflow-hidden">
+      <Card className="overflow-hidden">
         <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-3">
           <span className="text-sm font-medium">{t('portfolio.orders.title')}</span>
           {ordersTotal > 0 && (
@@ -301,24 +326,14 @@ export function Portfolio() {
               <span className="tabular-nums">
                 {t('portfolio.orders.showing', { from: ordersFrom, to: ordersTo, total: ordersTotal })}
               </span>
-              <button
-                type="button"
-                onClick={() => setOrdersPage((p) => Math.max(0, p - 1))}
-                disabled={ordersPage === 0}
-                className="p-1 rounded border border-border hover:bg-surface-2 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
-                aria-label={t('portfolio.orders.prev')}
-              >
-                <ChevronLeft size={14} />
-              </button>
-              <button
-                type="button"
-                onClick={() => setOrdersPage((p) => p + 1)}
-                disabled={!hasMoreOrders}
-                className="p-1 rounded border border-border hover:bg-surface-2 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
-                aria-label={t('portfolio.orders.next')}
-              >
-                <ChevronRight size={14} />
-              </button>
+              <PaginationButtons
+                onPrev={() => setOrdersPage((p) => Math.max(0, p - 1))}
+                onNext={() => setOrdersPage((p) => p + 1)}
+                prevDisabled={ordersPage === 0}
+                nextDisabled={!hasMoreOrders}
+                prevLabel={t('portfolio.orders.prev')}
+                nextLabel={t('portfolio.orders.next')}
+              />
             </div>
           )}
         </div>
@@ -356,7 +371,7 @@ export function Portfolio() {
             </table>
           </div>
         )}
-      </div>
+      </Card>
     </div>
   )
 }

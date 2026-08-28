@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChevronDown, RotateCcw, TrendingUp } from 'lucide-react'
+import { Select } from '@/components/ui/Select'
+import { Card } from '@/components/ui/Card'
 import {
   DcaParams,
   DcaParamGroup,
@@ -40,7 +42,7 @@ export function DcaCompareControls({ params, onChange, onRun, isPending }: Props
     DCA_PRESET_IDS.find((id) => JSON.stringify(DCA_PRESETS[id]) === JSON.stringify(params)) ?? 'custom'
 
   return (
-    <div className="bg-surface border border-border rounded-xl overflow-hidden self-stretch">
+    <Card className="overflow-hidden self-stretch">
       <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-3">
         <button
           type="button"
@@ -66,14 +68,14 @@ export function DcaCompareControls({ params, onChange, onRun, isPending }: Props
           <div className="flex items-center gap-3 flex-wrap">
             <label className="flex items-center gap-2 text-xs text-text-muted">
               {t('backtests.dca.params.preset')}
-              <select
+              <Select
                 aria-label={t('backtests.dca.params.preset')}
                 value={activePreset}
                 onChange={(e) => {
                   const id = e.target.value
                   if (id !== 'custom' && DCA_PRESETS[id]) onChange(DCA_PRESETS[id])
                 }}
-                className="bg-background border border-border rounded px-2 py-1 text-text text-xs cursor-pointer"
+                className="px-2 py-1 text-xs"
               >
                 {activePreset === 'custom' && (
                   <option value="custom">{t('backtests.dca.params.presetName.custom')}</option>
@@ -83,7 +85,7 @@ export function DcaCompareControls({ params, onChange, onRun, isPending }: Props
                     {t(`backtests.dca.params.presetName.${id}`)}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <button
               type="button"
@@ -107,23 +109,23 @@ export function DcaCompareControls({ params, onChange, onRun, isPending }: Props
                     (!WINDOW_ONLY_KEYS.has(f.key) || params.cycle.timing_mode === 'windows'),
                 ).map((f) => {
                   const label = t(`backtests.dca.params.field.${f.key}`)
-                  const value = (params[group] as Record<string, unknown>)[f.key]
+                  const value = (params[group] as unknown as Record<string, unknown>)[f.key]
                   return (
                     <label key={f.key} className="flex flex-col gap-1 text-xs text-text-muted">
                       <span>{label}</span>
                       {f.kind === 'enum' ? (
-                        <select
+                        <Select
                           aria-label={label}
                           value={value as string}
                           onChange={(e) => setField(group, f.key, e.target.value)}
-                          className="bg-background border border-border rounded px-2 py-1 text-text cursor-pointer"
+                          className="px-2 py-1"
                         >
                           {f.options.map((opt) => (
                             <option key={opt} value={opt}>
                               {t(`backtests.dca.params.timingMode.${opt}`)}
                             </option>
                           ))}
-                        </select>
+                        </Select>
                       ) : (
                         <input
                           type="number"
@@ -153,6 +155,6 @@ export function DcaCompareControls({ params, onChange, onRun, isPending }: Props
           ))}
         </div>
       )}
-    </div>
+    </Card>
   )
 }

@@ -9,6 +9,11 @@ import {
 import { api } from '@/lib/api'
 import { useToastStore } from '@/stores/toast'
 import { StatusBadge } from '@/components/strategy/StatusBadge'
+import { PortfolioTypeBadge } from '@/components/broker/PortfolioTypeBadge'
+import { Select } from '@/components/ui/Select'
+import { Card } from '@/components/ui/Card'
+import { Button } from '@/components/ui/Button'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/Dialog'
 import {
   ExecutionConfigForm, DEFAULT_EXECUTION_CONFIG,
 } from '@/components/strategy/ExecutionConfigForm'
@@ -60,25 +65,22 @@ function CreateDialog({ classes, brokers, onClose, onCreate, isPending }: Create
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="bg-surface border border-border rounded-xl w-full max-w-md mx-4 shadow-2xl">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <span className="text-sm font-semibold text-text">{t('strategies.dialog.title')}</span>
-          <button onClick={onClose} className="text-text-muted hover:text-text"><X size={16} /></button>
-        </div>
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle className="text-sm font-semibold text-text">{t('strategies.dialog.title')}</DialogTitle>
+          <DialogClose className="text-text-muted hover:text-text"><X size={16} /></DialogClose>
+        </DialogHeader>
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           <div className="space-y-1.5">
             <label className="text-[11px] font-medium text-text-muted uppercase tracking-wider">{t('strategies.dialog.strategy')}</label>
-            <div className="relative">
-              <select
-                value={classIdx} onChange={(e) => handleClassChange(Number(e.target.value))}
-                className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-text appearance-none pr-8"
-              >
-                {classes.map((c, i) => <option key={c.class_name} value={i}>{c.display_name}</option>)}
-              </select>
-              <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
-            </div>
+            <Select
+              value={classIdx} onChange={(e) => handleClassChange(Number(e.target.value))}
+              className="w-full bg-surface-2 px-3 py-2 text-sm"
+            >
+              {classes.map((c, i) => <option key={c.class_name} value={i}>{c.display_name}</option>)}
+            </Select>
             <p className="text-[11px] text-text-muted">{selected?.description}</p>
           </div>
 
@@ -103,15 +105,12 @@ function CreateDialog({ classes, brokers, onClose, onCreate, isPending }: Create
             </div>
             <div className="space-y-1.5">
               <label className="text-[11px] font-medium text-text-muted uppercase tracking-wider">{t('strategies.dialog.timeframe')}</label>
-              <div className="relative">
-                <select
-                  value={timeframe} onChange={(e) => setTimeframe(e.target.value)}
-                  className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-text appearance-none pr-8"
-                >
-                  {['1m','5m','15m','30m','1h','4h','1d','1w'].map((tf) => <option key={tf} value={tf}>{tf}</option>)}
-                </select>
-                <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
-              </div>
+              <Select
+                value={timeframe} onChange={(e) => setTimeframe(e.target.value)}
+                className="w-full bg-surface-2 px-3 py-2 text-sm"
+              >
+                {['1m','5m','15m','30m','1h','4h','1d','1w'].map((tf) => <option key={tf} value={tf}>{tf}</option>)}
+              </Select>
             </div>
           </div>
 
@@ -119,18 +118,15 @@ function CreateDialog({ classes, brokers, onClose, onCreate, isPending }: Create
             <label className="text-[11px] font-medium text-text-muted uppercase tracking-wider">
               {t('strategies.dialog.brokerConnection')} <span className="normal-case">{t('strategies.dialog.labelOptional')}</span>
             </label>
-            <div className="relative">
-              <select
-                value={brokerId} onChange={(e) => setBrokerId(e.target.value)}
-                className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-text appearance-none pr-8"
-              >
-                <option value="">{t('strategies.dialog.noConnection')}</option>
-                {brokers.map((b) => (
-                  <option key={b.id} value={b.id}>{b.label || b.broker_id} {b.is_paper ? '(Paper)' : '(Live)'}</option>
-                ))}
-              </select>
-              <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
-            </div>
+            <Select
+              value={brokerId} onChange={(e) => setBrokerId(e.target.value)}
+              className="w-full bg-surface-2 px-3 py-2 text-sm"
+            >
+              <option value="">{t('strategies.dialog.noConnection')}</option>
+              {brokers.map((b) => (
+                <option key={b.id} value={b.id}>{b.label || b.broker_id} {b.is_paper ? '(Paper)' : '(Live)'}</option>
+              ))}
+            </Select>
           </div>
 
           {selected?.parameters.length > 0 && (
@@ -166,18 +162,16 @@ function CreateDialog({ classes, brokers, onClose, onCreate, isPending }: Create
           </div>
 
           <div className="flex gap-2 pt-1">
-            <button type="button" onClick={onClose}
-              className="flex-1 px-4 py-2 rounded-lg border border-border text-sm text-text-muted hover:text-text hover:bg-surface-2 transition-colors">
+            <Button type="button" variant="secondary" onClick={onClose} className="flex-1">
               {t('strategies.dialog.cancel')}
-            </button>
-            <button type="submit" disabled={isPending || !symbol}
-              className="flex-1 px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors">
+            </Button>
+            <Button type="submit" disabled={isPending || !symbol} className="flex-1">
               {isPending ? t('strategies.dialog.creating') : t('strategies.dialog.create')}
-            </button>
+            </Button>
           </div>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -198,7 +192,7 @@ function StrategyCard({ strategy, brokers, onStatusChange, onDelete, onEditConfi
   const canGoLive = strategy.status === 'paper'
 
   return (
-    <div className="bg-surface border border-border rounded-xl p-4 space-y-3">
+    <Card className="p-4 space-y-3">
       <div className="flex items-start justify-between gap-2">
         <div>
           <div className="flex items-center gap-2">
@@ -233,21 +227,20 @@ function StrategyCard({ strategy, brokers, onStatusChange, onDelete, onEditConfi
               className="text-text-muted hover:text-primary transition-colors">
               <SlidersHorizontal size={14} />
             </button>
-            <button onClick={() => setConfirmDelete(true)} className="text-text-muted hover:text-danger transition-colors">
+            <button onClick={() => setConfirmDelete(true)} title={t('strategies.card.delete')} aria-label={t('strategies.card.delete')}
+              className="text-text-muted hover:text-danger transition-colors">
               <Trash2 size={14} />
             </button>
           </div>
         )}
       </div>
 
-      <div className="text-[11px] text-text-muted">
+      <div className="text-[11px] text-text-muted flex items-center gap-1.5">
         {broker ? (
-          <span>
-            {broker.label || broker.broker_id}
-            <span className={`ml-1 ${broker.is_paper ? 'text-yellow-400' : 'text-success'}`}>
-              ({broker.is_paper ? 'Paper' : 'Live'})
-            </span>
-          </span>
+          <>
+            <span>{broker.label || broker.broker_id}</span>
+            <PortfolioTypeBadge isPaper={broker.is_paper} />
+          </>
         ) : (
           <span className="italic">{t('strategies.card.noBroker')}</span>
         )}
@@ -297,7 +290,7 @@ function StrategyCard({ strategy, brokers, onStatusChange, onDelete, onEditConfi
       <div className="flex gap-1.5 pt-1">
         {canStart && (
           <button onClick={() => onStatusChange(strategy.id, 'paper')}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-[11px] font-medium hover:bg-yellow-500/20 transition-colors">
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-warning/10 border border-warning/30 text-warning text-[11px] font-medium hover:bg-warning/20 transition-colors">
             <FlaskConical size={11} /> {t('strategies.card.startPaper')}
           </button>
         )}
@@ -314,7 +307,7 @@ function StrategyCard({ strategy, brokers, onStatusChange, onDelete, onEditConfi
           </button>
         )}
       </div>
-    </div>
+    </Card>
   )
 }
 
@@ -330,32 +323,30 @@ function ConfigDialog({ strategy, onClose, onSave, isPending }: ConfigDialogProp
   const [cfg, setCfg] = useState<ExecutionConfig>(strategy.execution ?? DEFAULT_EXECUTION_CONFIG)
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="bg-surface border border-border rounded-xl w-full max-w-md mx-4 shadow-2xl">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent>
+        <DialogHeader>
           <div className="flex items-center gap-2">
             <SlidersHorizontal size={14} className="text-primary" />
-            <span className="text-sm font-semibold text-text">{t('strategies.config.editTitle')}</span>
+            <DialogTitle className="text-sm font-semibold text-text">{t('strategies.config.editTitle')}</DialogTitle>
             <span className="text-[11px] text-text-muted font-mono">{strategy.label}</span>
           </div>
-          <button onClick={onClose} className="text-text-muted hover:text-text"><X size={16} /></button>
-        </div>
+          <DialogClose className="text-text-muted hover:text-text"><X size={16} /></DialogClose>
+        </DialogHeader>
 
         <div className="p-5 space-y-4">
           <ExecutionConfigForm value={cfg} onChange={(patch) => setCfg((prev) => ({ ...prev, ...patch }))} />
           <div className="flex gap-2 pt-1">
-            <button type="button" onClick={onClose}
-              className="flex-1 px-4 py-2 rounded-lg border border-border text-sm text-text-muted hover:text-text hover:bg-surface-2 transition-colors">
+            <Button type="button" variant="secondary" onClick={onClose} className="flex-1">
               {t('strategies.dialog.cancel')}
-            </button>
-            <button type="button" disabled={isPending} onClick={() => onSave(strategy.id, cfg)}
-              className="flex-1 px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors">
+            </Button>
+            <Button type="button" disabled={isPending} onClick={() => onSave(strategy.id, cfg)} className="flex-1">
               {isPending ? t('strategies.config.saving') : t('strategies.config.save')}
-            </button>
+            </Button>
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -423,12 +414,9 @@ export function Strategies() {
           </h1>
           <p className="text-[12px] text-text-muted mt-0.5">{t('strategies.subtitle')}</p>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90 transition-colors"
-        >
+        <Button onClick={() => setShowCreate(true)} className="flex items-center gap-1.5 px-3 py-2">
           <Plus size={14} /> {t('strategies.newStrategy')}
-        </button>
+        </Button>
       </div>
 
       {isLoading && <div className="text-sm text-text-muted">{t('strategies.loading')}</div>}
@@ -472,12 +460,9 @@ export function Strategies() {
             <p className="text-sm font-medium text-text">{t('strategies.empty')}</p>
             <p className="text-[12px] text-text-muted mt-1">{t('strategies.emptyHint')}</p>
           </div>
-          <button
-            onClick={() => setShowCreate(true)}
-            className="mt-2 flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90 transition-colors"
-          >
+          <Button onClick={() => setShowCreate(true)} className="mt-2 flex items-center gap-1.5">
             <Plus size={14} /> {t('strategies.newStrategy')}
-          </button>
+          </Button>
         </div>
       )}
 

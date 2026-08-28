@@ -170,6 +170,7 @@ export interface StrategyClassDef {
     type: 'int' | 'float' | 'string' | 'bool'
     default: number | string | boolean
     label: string
+    description?: string
   }>
 }
 
@@ -223,6 +224,9 @@ export interface PlaceOrderPayload {
   symbol: string
   side: 'buy' | 'sell'
   order_type: 'market' | 'limit'
+  // What `quantity` means: base-asset units, fiat amount to spend/receive, or a
+  // percent (1-100) of the currently held position.
+  amount_type: 'quantity' | 'notional' | 'percent'
   quantity: number
   limit_price?: number
   time_in_force?: 'day' | 'gtc' | 'ioc' | 'fok'

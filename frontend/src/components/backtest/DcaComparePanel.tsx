@@ -3,6 +3,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer,
 } from 'recharts'
 import { formatCurrency, formatPercent } from '@/lib/utils'
+import { Card } from '@/components/ui/Card'
 import type { DcaCompareResponse } from '@/types/backtest'
 
 // Preferred display order + colors. The chart/table render only the arms actually present in
@@ -34,7 +35,7 @@ export function DcaComparePanel({ result }: { result: DcaCompareResponse }) {
   const chartData = [...byTs.values()].sort((a, b) => a.time - b.time)
 
   return (
-    <div className="bg-surface border border-border rounded-xl overflow-hidden">
+    <Card className="overflow-hidden">
       <div className="px-4 py-3 border-b border-border">
         <span className="text-sm font-medium">{t('backtests.dca.title')}</span>
       </div>
@@ -128,6 +129,6 @@ export function DcaComparePanel({ result }: { result: DcaCompareResponse }) {
           </table>
         </div>
       </div>
-    </div>
+    </Card>
   )
 }

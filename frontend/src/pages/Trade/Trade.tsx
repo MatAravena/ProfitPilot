@@ -8,6 +8,8 @@ import { ChartMetricsPanel } from '@/components/charts/ChartMetricsPanel'
 import {
   defaultIndicatorSettings, type IndicatorSettings,
 } from '@/lib/indicatorConfig'
+import { Card } from '@/components/ui/Card'
+import { Button } from '@/components/ui/Button'
 
 const TIMEFRAMES = ['1m', '5m', '15m', '1h', '4h', '1d', '1w'] as const
 const QUICK_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT']
@@ -72,12 +74,9 @@ export function Trade() {
             placeholder="Symbol"
             className="w-32 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-mono text-text focus:border-primary focus:outline-none"
           />
-          <button
-            onClick={applySymbol}
-            className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-primary/90 cursor-pointer"
-          >
+          <Button onClick={applySymbol} className="px-3 py-1.5">
             {t('trade.load')}
-          </button>
+          </Button>
         </div>
 
         <div className="flex gap-1">
@@ -112,12 +111,12 @@ export function Trade() {
       {/* Main grid: controls | chart | metrics */}
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[200px_1fr_240px]">
         {/* Indicator controls */}
-        <div className="order-2 overflow-y-auto rounded-xl border border-border bg-surface p-3 lg:order-1">
+        <Card className="order-2 overflow-y-auto p-3 lg:order-1">
           <IndicatorControls settings={settings} onChange={setSettings} />
-        </div>
+        </Card>
 
         {/* Chart */}
-        <div className="order-1 relative min-h-[460px] rounded-xl border border-border bg-surface p-3 lg:order-2">
+        <Card className="order-1 relative min-h-[460px] p-3 lg:order-2">
           {isFetching && (
             <div className="absolute right-4 top-4 z-10 flex items-center gap-1">
               <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-success" />
@@ -135,12 +134,12 @@ export function Trade() {
               {t('trade.loading')}
             </div>
           )}
-        </div>
+        </Card>
 
         {/* Metrics */}
-        <div className="order-3 overflow-y-auto rounded-xl border border-border bg-surface p-3">
+        <Card className="order-3 overflow-y-auto p-3">
           <ChartMetricsPanel symbol={symbol} candles={candles} hover={hover} position={position} />
-        </div>
+        </Card>
       </div>
     </div>
   )

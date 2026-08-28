@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { ArrowRight, TrendingUp, Shield, Zap } from 'lucide-react'
+import { Card } from '@/components/ui/Card'
 
 export function Landing() {
   const navigate = useNavigate()
@@ -61,7 +62,7 @@ export function Landing() {
         </div>
 
         {/* Live preview mockup */}
-        <div className="flex-1 bg-surface border border-border rounded-2xl p-6 shadow-glow">
+        <Card className="flex-1 rounded-2xl p-6 shadow-glow">
           <div className="flex items-center justify-between mb-4">
             <span className="text-xs text-text-muted font-medium">{t('landing.preview.title')}</span>
             <span className="flex items-center gap-1.5 text-xs text-success">
@@ -89,7 +90,7 @@ export function Landing() {
               </div>
             ))}
           </div>
-        </div>
+        </Card>
       </section>
 
       {/* Features strip */}

@@ -6,6 +6,10 @@ import { api } from '@/lib/api'
 import type { BrokerName, ConnectBrokerPayload, RiskProfile } from '@/types'
 import { useToastStore } from '@/stores/toast'
 import { cn } from '@/lib/utils'
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/Tooltip'
+import { PortfolioTypeBadge } from '@/components/broker/PortfolioTypeBadge'
+import { Card } from '@/components/ui/Card'
+import { Button } from '@/components/ui/Button'
 
 const BROKERS: { id: BrokerName; label: string; markets: string }[] = [
   { id: 'bybit',   label: 'Bybit',   markets: 'Crypto · Futures' },
@@ -85,13 +89,13 @@ export function Settings() {
         {isLoading ? (
           <div className="text-sm text-text-muted">{t('settings.loading')}</div>
         ) : connections.length === 0 && !showForm ? (
-          <div className="bg-surface border border-border rounded-xl px-4 py-8 text-center text-text-muted text-sm">
+          <Card className="px-4 py-8 text-center text-text-muted text-sm">
             {t('settings.noBrokers')}
-          </div>
+          </Card>
         ) : (
           <div className="flex flex-col gap-2">
             {connections.map((conn) => (
-              <div key={conn.id} className="bg-surface border border-border rounded-xl px-4 py-3 flex items-center justify-between">
+              <Card key={conn.id} className="px-4 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className={cn(
                     'w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold',
@@ -112,16 +116,21 @@ export function Settings() {
                     <CheckCircle size={12} />
                     <span>{t('settings.active')}</span>
                   </div>
-                  <button
-                    onClick={() => disconnect.mutate(conn.id)}
-                    disabled={disconnect.isPending}
-                    className="p-1.5 rounded-lg text-text-muted hover:text-danger hover:bg-danger/10 transition-colors cursor-pointer disabled:opacity-40"
-                    title="Disconnect"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={() => disconnect.mutate(conn.id)}
+                        disabled={disconnect.isPending}
+                        aria-label={t('settings.disconnect')}
+                        className="p-1.5 rounded-lg text-text-muted hover:text-danger hover:bg-danger/10 transition-colors cursor-pointer disabled:opacity-40"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>{t('settings.disconnect')}</TooltipContent>
+                  </Tooltip>
                 </div>
-              </div>
+              </Card>
             ))}
           </div>
         )}
@@ -249,12 +258,9 @@ export function Settings() {
             )}
 
             <div className="flex gap-2">
-              <button
-                type="submit" disabled={connect.isPending}
-                className="flex-1 bg-primary text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 cursor-pointer"
-              >
+              <Button type="submit" disabled={connect.isPending} className="flex-1">
                 {connect.isPending ? t('settings.form.connecting') : t('settings.form.connect')}
-              </button>
+              </Button>
               <button
                 type="button" onClick={() => { setShowForm(false); setForm(EMPTY_FORM) }}
                 className="px-4 py-2 border border-border rounded-lg text-sm text-text-muted hover:text-text hover:border-primary/50 transition-colors cursor-pointer"
@@ -307,7 +313,7 @@ function RiskDefaults() {
   return (
     <section>
       <h2 className="text-sm font-medium text-text-muted uppercase tracking-wide mb-3">{t('settings.risk.title')}</h2>
-      <div className="bg-surface border border-border rounded-xl p-4 flex flex-col gap-4">
+      <Card className="p-4 flex flex-col gap-4">
         <p className="text-[11px] text-text-muted">{t('settings.risk.hint')}</p>
         <div className="grid grid-cols-2 gap-3">
           {RISK_PCT_FIELDS.map(({ key, labelKey }) => (
@@ -344,28 +350,11 @@ function RiskDefaults() {
             </label>
           ))}
         </div>
-        <button
-          onClick={() => save.mutate(profile)}
-          disabled={save.isPending || draft === null}
-          className="self-start bg-primary text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 cursor-pointer"
-        >
+        <Button onClick={() => save.mutate(profile)} disabled={save.isPending || draft === null} className="self-start">
           {save.isPending ? t('settings.risk.saving') : t('settings.risk.save')}
-        </button>
-      </div>
+        </Button>
+      </Card>
     </section>
   )
 }
 
-function PortfolioTypeBadge({ isPaper }: { isPaper: boolean }) {
-  const { t } = useTranslation()
-  return (
-    <span className={cn(
-      'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium',
-      isPaper ? 'bg-warning/10 text-warning' : 'bg-danger/10 text-danger',
-    )}>
-      {isPaper
-        ? <><FlaskConical size={9} /> {t('settings.badge.paper')}</>
-        : <><Zap size={9} /> {t('settings.badge.live')}</>}
-    </span>
-  )
-}

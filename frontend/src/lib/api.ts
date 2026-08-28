@@ -100,10 +100,10 @@ export const api = {
     connect: (body: ConnectBrokerPayload) =>
       request<BrokerConnection>('/brokers', { method: 'POST', body: JSON.stringify(body) }),
     disconnect: (id: string) => request<void>(`/brokers/${id}`, { method: 'DELETE' }),
-    account: (brokerId: string) => request(`/brokers/${brokerId}/account`),
-    positions: (brokerId: string) => request(`/brokers/${brokerId}/positions`),
-    placeOrder: (brokerId: string, body: PlaceOrderPayload) =>
-      request<OrderResult>(`/brokers/${brokerId}/orders`, {
+    account: (connectionId: string) => request(`/brokers/${connectionId}/account`),
+    positions: (connectionId: string) => request(`/brokers/${connectionId}/positions`),
+    placeOrder: (connectionId: string, body: PlaceOrderPayload) =>
+      request<OrderResult>(`/brokers/${connectionId}/orders`, {
         method: 'POST',
         body: JSON.stringify(body),
       }),

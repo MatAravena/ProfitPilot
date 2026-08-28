@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { Play, TrendingUp, TrendingDown, Activity, BarChart2, Award, AlertTriangle, Dices } from 'lucide-react'
+import { Play, TrendingUp, TrendingDown, Activity, BarChart2, Award, AlertTriangle, Dices, Info } from 'lucide-react'
 import { api } from '@/lib/api'
 import { friendlyError } from '@/lib/errors'
 import { useToastStore } from '@/stores/toast'
 import type { BacktestRequest, BacktestResponse, BacktestMetrics, StrategyMeta, MonteCarloResponse, DcaCompareResponse } from '@/types/backtest'
 import type { StrategyInstance } from '@/types'
 import { formatCurrency, formatPercent } from '@/lib/utils'
+import { Select } from '@/components/ui/Select'
+import { Card } from '@/components/ui/Card'
+import { Button } from '@/components/ui/Button'
 import { EquityChart } from '@/components/charts/EquityChart'
 import { MetricCard } from '@/components/backtest/MetricCard'
 import { TradeTable } from '@/components/backtest/TradeTable'
@@ -166,10 +169,10 @@ export function Backtests() {
         <form onSubmit={handleSubmit} className="bg-surface border border-border rounded-xl p-4 flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
             <label className="text-xs text-text-muted font-medium">{t('backtests.strategy')}</label>
-            <select
+            <Select
               value={selectValue}
               onChange={(e) => handleStrategyChange(e.target.value)}
-              className="bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              className="w-full px-3 py-2 text-sm"
             >
               {instances.length > 0 && (
                 <optgroup label="My Strategies">
@@ -185,7 +188,7 @@ export function Backtests() {
                   <option key={s.class_name ?? `strategy-${i}`} value={s.class_name}>{s.display_name}</option>
                 ))}
               </optgroup>
-            </select>
+            </Select>
             {activeMeta?.description && (
               <p className="text-[11px] text-text-muted leading-relaxed">{activeMeta.description}</p>
             )}
@@ -194,23 +197,23 @@ export function Backtests() {
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
               <label className="text-xs text-text-muted font-medium">{t('backtests.symbol')}</label>
-              <select
+              <Select
                 value={form.symbol}
                 onChange={(e) => setForm((f) => ({ ...f, symbol: e.target.value }))}
-                className="bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                className="w-full px-3 py-2 text-sm"
               >
                 {SYMBOLS.map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
+              </Select>
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-xs text-text-muted font-medium">{t('backtests.timeframe')}</label>
-              <select
+              <Select
                 value={form.timeframe}
                 onChange={(e) => setForm((f) => ({ ...f, timeframe: e.target.value }))}
-                className="bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                className="w-full px-3 py-2 text-sm"
               >
                 {TIMEFRAMES.map((tf) => <option key={tf} value={tf}>{tf}</option>)}
-              </select>
+              </Select>
             </div>
           </div>
 
@@ -331,7 +334,14 @@ export function Backtests() {
               <div className="grid grid-cols-2 gap-2">
                 {params.map((p, i) => (
                   <div key={p.key ?? `param-${i}`} className="flex flex-col gap-1">
-                    <span className="text-[11px] text-text-muted">{p.label}</span>
+                    <span className="text-[11px] text-text-muted flex items-center gap-1">
+                      {p.label}
+                      {p.description && (
+                        <span title={p.description}>
+                          <Info size={11} className="text-text-muted/70 cursor-help" />
+                        </span>
+                      )}
+                    </span>
                     <input
                       type="number" step={p.type === 'float' ? 0.1 : 1}
                       value={String(form.parameters[p.key] ?? p.default)}
@@ -350,30 +360,30 @@ export function Backtests() {
             </p>
           )}
 
-          <button
+          <Button
             type="submit"
             disabled={!form.strategy_name || run.isPending}
-            className="flex items-center justify-center gap-2 bg-primary text-white rounded-lg px-4 py-2.5 text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+            className="flex items-center justify-center gap-2 py-2.5"
           >
             <Play size={14} />
             {run.isPending ? t('backtests.running') : t('backtests.runBacktest')}
-          </button>
+          </Button>
         </form>
 
         {/* Results panel */}
         <div className="flex flex-col gap-4">
           {!result && !run.isPending && (
-            <div className="bg-surface border border-border rounded-xl p-12 flex flex-col items-center gap-3 text-text-muted">
+            <Card className="p-12 flex flex-col items-center gap-3 text-text-muted">
               <BarChart2 size={32} strokeWidth={1} />
               <p className="text-sm">{t('backtests.emptyState')}</p>
-            </div>
+            </Card>
           )}
 
           {run.isPending && (
-            <div className="bg-surface border border-border rounded-xl p-12 flex flex-col items-center gap-3 text-text-muted">
+            <Card className="p-12 flex flex-col items-center gap-3 text-text-muted">
               <Activity size={32} strokeWidth={1} className="animate-pulse" />
               <p className="text-sm">{t('backtests.loadingState')}</p>
-            </div>
+            </Card>
           )}
 
           {result && m && (
@@ -396,7 +406,7 @@ export function Backtests() {
               </div>
 
               {result.prices.length > 0 && (
-                <div className="bg-surface border border-border rounded-xl overflow-hidden">
+                <Card className="overflow-hidden">
                   <div className="px-4 py-3 border-b border-border flex items-center justify-between">
                     <span className="text-sm font-medium">Price · Trade Entries &amp; Exits</span>
                     <span className="text-xs text-text-muted">
@@ -408,10 +418,10 @@ export function Backtests() {
                     trades={result.trades}
                     height={280}
                   />
-                </div>
+                </Card>
               )}
 
-              <div className="bg-surface border border-border rounded-xl overflow-hidden">
+              <Card className="overflow-hidden">
                 <div className="px-4 py-3 border-b border-border flex items-center justify-between">
                   <span className="text-sm font-medium">{t('backtests.equityCurve')}</span>
                   <span className="text-xs text-text-muted">
@@ -419,7 +429,7 @@ export function Backtests() {
                   </span>
                 </div>
                 <EquityChart data={equityData} height={260} />
-              </div>
+              </Card>
 
               <TradeTable trades={result.trades} />
 

@@ -26,8 +26,10 @@ STRATEGY_META = {
     "display_name": "My Strategy",
     "description": "Short description shown in the UI",
     "parameters": [
-        # Add your parameters here. Supported types: "int", "float"
-        {"key": "my_param", "type": "int", "default": 14, "label": "My Param"},
+        # Add your parameters here. Supported types: "int", "float".
+        # "description" is optional — shown as a tooltip next to the field in the UI.
+        {"key": "my_param", "type": "int", "default": 14, "label": "My Param",
+         "description": "What this parameter controls and how changing it affects behavior."},
     ],
 }
 

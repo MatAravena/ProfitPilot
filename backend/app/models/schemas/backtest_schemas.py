@@ -236,6 +236,7 @@ class StrategyParamDef(BaseModel):
     type: str
     default: Any
     label: str
+    description: Optional[str] = None
 
 
 class StrategyMeta(BaseModel):

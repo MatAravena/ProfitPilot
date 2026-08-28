@@ -202,7 +202,7 @@ export function mergeDcaParams(input: unknown): DcaParams {
   const src = isRecord(input) ? input : {}
   const out = {} as DcaParams
   for (const group of Object.keys(DEFAULT_DCA_PARAMS) as DcaParamGroup[]) {
-    const defBlock = DEFAULT_DCA_PARAMS[group] as Record<string, unknown>
+    const defBlock = DEFAULT_DCA_PARAMS[group] as unknown as Record<string, unknown>
     const srcBlock = isRecord(src[group]) ? (src[group] as Record<string, unknown>) : {}
     const merged: Record<string, unknown> = {}
     for (const key of Object.keys(defBlock)) {

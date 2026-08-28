@@ -162,6 +162,7 @@ export interface StrategyParamDef {
   type: 'int' | 'float' | string
   default: number
   label: string
+  description?: string
 }
 
 export interface StrategyMeta {

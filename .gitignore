@@ -37,6 +37,7 @@ yarn-error.log*
 .__pycache__*
 __pycache__/
 **/.venv
+**/.pytest_cache
 
 # vercel
 .vercel
@@ -45,6 +46,9 @@ __pycache__/
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# FE
+frontend/dist/*
 
 # personal comments
 *.txt

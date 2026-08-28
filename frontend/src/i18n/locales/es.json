@@ -301,12 +301,26 @@
       "orderHistory": "Historial de órdenes",
       "showSignals": "Mostrar señales",
       "noOrders": "Aún no hay órdenes",
+      "lastSignal": "Última señal {{time}}",
+      "showing": "{{from}}–{{to}} de {{total}}",
+      "prev": "Página anterior",
+      "next": "Página siguiente",
       "colTime": "Hora",
       "colSide": "Lado",
       "colQty": "Cant.",
       "colPrice": "Precio",
       "colPnl": "P&L",
-      "colStatus": "Estado"
+      "colStatus": "Estado",
+      "stats": {
+        "pnl": "P&L realizado",
+        "winRate": "Tasa de acierto",
+        "filled": "Órdenes ejecutadas",
+        "lastFill": "Última ejecución"
+      },
+      "signals": {
+        "title": "Señales recientes",
+        "empty": "Aún no hay señales"
+      }
     },
     "card": {
       "delete": "Eliminar",

@@ -119,6 +119,45 @@ def round_to_tick(value: float, tick: float) -> float:
     return float((_dec(value) / d_tick).quantize(Decimal("1"), rounding=ROUND_HALF_UP) * d_tick)
 
 
+def clean_float_noise(value: float, decimals: int = 8) -> float:
+    """Round away binary-float representation noise (e.g. `21.999999999999996` →
+    `22.0`) without snapping to a lot-step multiple.
+
+    Unlike `floor_to_step`/`round_to_tick`, this never changes an economically real
+    quantity — only float-representation garbage past `decimals` places. It exists to
+    make a value serialize cleanly (`str(value)` in an adapter's order payload), not to
+    enforce a grid. `decimals=8` is generous enough for every venue's real precision.
+    """
+    return round(value, decimals)
+
+
+def conform_close(
+    instrument: Optional[Instrument],
+    *,
+    quantity: float,
+    price: Optional[float] = None,
+) -> Tuple[float, Optional[float]]:
+    """Conform an order that **exits** an already-held position.
+
+    Unlike `conform_order`, this never floors or validates the quantity: a close must
+    exit exactly what's held, never a lot-step-rounded approximation of it. Flooring to
+    the lot step could zero out a below-one-lot-step remainder (dust from a partial
+    fill, or a legacy pre-registry position) and submit a nonsensical 0-quantity order
+    instead of actually closing the position — that was a real bug this function
+    replaces. Only float-representation noise is cleaned from the quantity; the price
+    is rounded to the tick size when the instrument is known.
+
+    `instrument` may be `None` — a close must always be able to exit a position even on
+    a symbol the catalog has never heard of. In that case only float-noise cleaning is
+    applied to the quantity, and the price passes through unrounded (there is no tick
+    size to round to).
+    """
+    conformed_qty = clean_float_noise(quantity)
+    if instrument is None or price is None:
+        return conformed_qty, price
+    return conformed_qty, round_to_tick(price, instrument.tick_size)
+
+
 def conform_order(
     instrument: Instrument,
     *,

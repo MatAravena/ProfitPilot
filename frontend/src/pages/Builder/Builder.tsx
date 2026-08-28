@@ -12,6 +12,9 @@ import { friendlyError } from '@/lib/errors'
 import { useToastStore } from '@/stores/toast'
 import type { BacktestResponse, BacktestMetrics } from '@/types/backtest'
 import { cn, formatCurrency, formatPercent } from '@/lib/utils'
+import { Select } from '@/components/ui/Select'
+import { Card } from '@/components/ui/Card'
+import { Button } from '@/components/ui/Button'
 import { EquityChart } from '@/components/charts/EquityChart'
 
 const TIMEFRAMES = ['1m', '5m', '15m', '1h', '4h', '1d'] as const
@@ -106,7 +109,7 @@ export function Builder() {
         {/* Left: code editor */}
         <div className="flex flex-col gap-4">
           {/* AI generation bar */}
-          <div className="bg-surface border border-border rounded-xl p-4 flex flex-col gap-3">
+          <Card className="p-4 flex flex-col gap-3">
             <div className="flex items-center gap-2">
               <Sparkles size={13} className="text-primary" />
               <span className="text-sm font-medium">{t('builder.ai.title')}</span>
@@ -120,14 +123,14 @@ export function Builder() {
                 onKeyDown={(e) => e.key === 'Enter' && description && generateMutation.mutate()}
                 className="flex-1 bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
               />
-              <button
+              <Button
                 onClick={() => generateMutation.mutate()}
                 disabled={!description || generateMutation.isPending}
-                className="flex items-center gap-1.5 bg-primary text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0"
+                className="flex items-center gap-1.5 shrink-0"
               >
                 <Sparkles size={13} />
                 {generateMutation.isPending ? t('builder.ai.generating') : t('builder.ai.generate')}
-              </button>
+              </Button>
             </div>
             {generateMutation.error && (
               <p className="text-xs text-danger">{friendlyError(generateMutation.error)}</p>
@@ -135,10 +138,10 @@ export function Builder() {
             {aiExplanation && (
               <p className="text-[11px] text-text-muted border-l-2 border-primary/40 pl-2">{aiExplanation}</p>
             )}
-          </div>
+          </Card>
 
           {/* Code editor */}
-          <div className="bg-surface border border-border rounded-xl overflow-hidden">
+          <Card className="overflow-hidden">
             <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-medium text-text-muted">strategy.py</span>
@@ -175,7 +178,7 @@ export function Builder() {
                 overviewRulerLanes: 0,
               }}
             />
-          </div>
+          </Card>
 
           {runMutation.error && (
             <p className="text-xs text-danger bg-danger/10 rounded-lg px-4 py-2.5">
@@ -186,17 +189,17 @@ export function Builder() {
 
         {/* Right: config + results */}
         <div className="flex flex-col gap-4">
-          <div className="bg-surface border border-border rounded-xl p-4 flex flex-col gap-3">
+          <Card className="p-4 flex flex-col gap-3">
             <span className="text-xs font-medium text-text-muted">{t('builder.config.title')}</span>
 
             <div className="flex flex-col gap-1">
               <label className="text-[11px] text-text-muted">{t('builder.config.symbol')}</label>
-              <select
+              <Select
                 value={symbol} onChange={(e) => setSymbol(e.target.value)}
-                className="bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                className="w-full px-3 py-2 text-sm"
               >
                 {SYMBOLS.map((s) => <option key={s}>{s}</option>)}
-              </select>
+              </Select>
             </div>
 
             <div className="flex flex-col gap-1">
@@ -235,15 +238,15 @@ export function Builder() {
               </div>
             </div>
 
-            <button
+            <Button
               onClick={() => runMutation.mutate()}
               disabled={!code.trim() || runMutation.isPending}
-              className="flex items-center justify-center gap-2 bg-primary text-white rounded-lg px-4 py-2.5 text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              className="flex items-center justify-center gap-2 py-2.5"
             >
               <Play size={13} />
               {runMutation.isPending ? t('builder.running') : t('builder.run')}
-            </button>
-          </div>
+            </Button>
+          </Card>
 
           {m && (
             <>
@@ -264,16 +267,16 @@ export function Builder() {
 
       {result && (
         <div className="flex flex-col gap-4">
-          <div className="bg-surface border border-border rounded-xl overflow-hidden">
+          <Card className="overflow-hidden">
             <div className="px-4 py-3 border-b border-border flex items-center justify-between">
               <span className="text-sm font-medium">{t('builder.equityCurve')}</span>
               <span className="text-xs text-text-muted">{result.symbol} · {result.timeframe}</span>
             </div>
             <EquityChart data={equityData} height={240} />
-          </div>
+          </Card>
 
           {result.trades.length > 0 && (
-            <div className="bg-surface border border-border rounded-xl overflow-hidden">
+            <Card className="overflow-hidden">
               <div className="px-4 py-3 border-b border-border">
                 <span className="text-sm font-medium">{t('builder.tradeHistory', { count: result.trades.length })}</span>
               </div>
@@ -300,7 +303,7 @@ export function Builder() {
                   </tbody>
                 </table>
               </div>
-            </div>
+            </Card>
           )}
         </div>
       )}
@@ -312,12 +315,12 @@ function MetricCard({ label, value, positive, icon: Icon }: {
   label: string; value: string; positive: boolean; icon: React.ElementType
 }) {
   return (
-    <div className="bg-surface border border-border rounded-xl p-3">
+    <Card className="p-3">
       <div className="flex items-center justify-between mb-1.5">
         <span className="text-[10px] text-text-muted font-medium">{label}</span>
         <Icon size={11} className="text-text-muted" strokeWidth={1.5} />
       </div>
       <p className={cn('text-sm font-bold', positive ? 'text-success' : 'text-danger')}>{value}</p>
-    </div>
+    </Card>
   )
 }

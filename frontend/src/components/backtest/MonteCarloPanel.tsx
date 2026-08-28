@@ -4,6 +4,7 @@ import {
   BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer,
 } from 'recharts'
 import { formatPercent } from '@/lib/utils'
+import { Card } from '@/components/ui/Card'
 import type { MonteCarloResponse, MonteCarloMethodResult } from '@/types/backtest'
 
 interface Props {
@@ -36,7 +37,7 @@ export function MonteCarloPanel({ result }: Props) {
   const bars = histogramData(method)
 
   return (
-    <div className="bg-surface border border-border rounded-xl overflow-hidden">
+    <Card className="overflow-hidden">
       <div className="px-4 py-3 border-b border-border flex items-center justify-between flex-wrap gap-2">
         <div className="flex flex-col">
           <span className="text-sm font-medium">{t('backtests.montecarlo.title')}</span>
@@ -129,7 +130,7 @@ export function MonteCarloPanel({ result }: Props) {
           </ResponsiveContainer>
         </div>
       </div>
-    </div>
+    </Card>
   )
 }
 

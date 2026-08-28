@@ -23,8 +23,10 @@ STRATEGY_META = {
     "display_name": "Bollinger Bands",
     "description": "Mean-reversion: buy below lower band, close above upper band",
     "parameters": [
-        {"key": "period",  "type": "int",   "default": 20,  "label": "Period"},
-        {"key": "std_dev", "type": "float", "default": 2.0, "label": "Std Dev Multiplier"},
+        {"key": "period",  "type": "int",   "default": 20,  "label": "Period",
+         "description": "Bars used for the moving average and standard deviation the bands are built from."},
+        {"key": "std_dev", "type": "float", "default": 2.0, "label": "Std Dev Multiplier",
+         "description": "How many standard deviations the bands sit from the middle average. Higher = wider bands, fewer signals."},
     ],
 }
 

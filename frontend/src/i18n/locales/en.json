@@ -306,12 +306,26 @@
       "orderHistory": "Order history",
       "showSignals": "Show signals",
       "noOrders": "No orders yet",
+      "lastSignal": "Last signal {{time}}",
+      "showing": "{{from}}–{{to}} of {{total}}",
+      "prev": "Previous page",
+      "next": "Next page",
       "colTime": "Time",
       "colSide": "Side",
       "colQty": "Qty",
       "colPrice": "Price",
       "colPnl": "P&L",
-      "colStatus": "Status"
+      "colStatus": "Status",
+      "stats": {
+        "pnl": "Realized P&L",
+        "winRate": "Win rate",
+        "filled": "Filled orders",
+        "lastFill": "Last fill"
+      },
+      "signals": {
+        "title": "Signal feed",
+        "empty": "No signals yet"
+      }
     },
     "card": {
       "delete": "Delete",

@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn, formatCurrency, formatPercent } from '@/lib/utils'
+import { PaginationButtons } from '@/components/ui/PaginationButtons'
+import { Card } from '@/components/ui/Card'
 import type { TradeRecord } from '@/types/backtest'
 
 interface Props {
@@ -29,30 +30,20 @@ export function TradeTable({ trades, pageSize = 50 }: Props) {
   const to = Math.min(safePage * pageSize + pageSize, trades.length)
 
   return (
-    <div className="bg-surface border border-border rounded-xl overflow-hidden">
+    <Card className="overflow-hidden">
       <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-3">
         <span className="text-sm font-medium">{t('backtests.tradeHistory', { count: trades.length })}</span>
         {paginated && (
           <div className="flex items-center gap-2 text-xs text-text-muted">
             <span className="tabular-nums">{t('backtests.pagination.showing', { from, to, total: trades.length })}</span>
-            <button
-              type="button"
-              onClick={() => setPage(safePage - 1)}
-              disabled={safePage === 0}
-              className="p-1 rounded border border-border hover:bg-surface-2 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
-              aria-label={t('backtests.pagination.prev')}
-            >
-              <ChevronLeft size={14} />
-            </button>
-            <button
-              type="button"
-              onClick={() => setPage(safePage + 1)}
-              disabled={safePage >= pageCount - 1}
-              className="p-1 rounded border border-border hover:bg-surface-2 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
-              aria-label={t('backtests.pagination.next')}
-            >
-              <ChevronRight size={14} />
-            </button>
+            <PaginationButtons
+              onPrev={() => setPage(safePage - 1)}
+              onNext={() => setPage(safePage + 1)}
+              prevDisabled={safePage === 0}
+              nextDisabled={safePage >= pageCount - 1}
+              prevLabel={t('backtests.pagination.prev')}
+              nextLabel={t('backtests.pagination.next')}
+            />
           </div>
         )}
       </div>
@@ -87,6 +78,6 @@ export function TradeTable({ trades, pageSize = 50 }: Props) {
           </tbody>
         </table>
       </div>
-    </div>
+    </Card>
   )
 }

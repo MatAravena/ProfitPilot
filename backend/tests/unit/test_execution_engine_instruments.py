@@ -138,7 +138,31 @@ async def test_close_is_never_rejected_by_a_min_size_violation():
                          latest_close=110)
     assert outcomes[0].action == ACTION_CLOSED
     assert len(broker.orders) == 1
-    assert broker.orders[0].quantity == pytest.approx(20.0)   # floored 22.0 → 20.0 (step 5)
+    assert broker.orders[0].quantity == pytest.approx(22.0)   # exact held qty, not floored
+
+
+async def test_close_quantity_is_never_floored_even_below_one_lot_step():
+    """Regression: closes used to be floor_to_step'd like opens. A held quantity smaller
+    than one lot step (dust from a partial fill, or a legacy pre-registry position) would
+    floor to exactly 0.0 — a nonsensical 0-quantity order submitted to the broker instead
+    of actually exiting the position, while `realized_pnl` (computed from the raw held
+    quantity by the caller) would still get booked as if the close had happened. Closes
+    must pass the held quantity through unchanged; only the reference price is conformed."""
+    coarse = Instrument(
+        symbol=SYMBOL, base="BTC", quote="USDT",
+        market_type=MarketType.CRYPTO, kind=InstrumentKind.SPOT,
+        tick_size=1.0, lot_step=5.0, min_qty=5.0, min_notional=5.0,
+        venues={},
+    )
+    eng = ExecutionEngine(RiskManager(), instruments=InstrumentRegistry([coarse]))
+    broker = FakeBroker()
+    pos = position(qty=2.0, entry=100, mark=110)   # smaller than the 5.0 lot step
+    outcomes = await run(eng, broker, position=pos, signals=[signal(Direction.CLOSE)],
+                         latest_close=110)
+    assert outcomes[0].action == ACTION_CLOSED
+    assert broker.orders[0].quantity == pytest.approx(2.0)   # not floored to 0.0
+    assert outcomes[0].fill is not None
+    assert outcomes[0].realized_pnl == pytest.approx((110 - 100) * 2.0)
 
 
 # ── Unseeded symbol ──────────────────────────────────────────────────────────────────

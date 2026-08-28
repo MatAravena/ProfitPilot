@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Switch } from '@/components/ui/Switch'
 import type { ExecutionConfig } from '@/types'
 
 // Behavioral defaults are concrete; risk fields default to null ⇒ inherit the user's risk profile.
@@ -112,27 +113,6 @@ function IntField({
   )
 }
 
-function Toggle({
-  label, checked, onChange,
-}: {
-  label: string
-  checked: boolean
-  onChange: (v: boolean) => void
-}) {
-  return (
-    <button
-      type="button" role="switch" aria-checked={checked}
-      onClick={() => onChange(!checked)}
-      className="flex items-center justify-between w-full bg-surface-2 border border-border rounded px-2.5 py-2"
-    >
-      <span className="text-[11px] text-text">{label}</span>
-      <span className={`relative inline-block w-8 h-4 rounded-full transition-colors ${checked ? 'bg-primary' : 'bg-border'}`}>
-        <span className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${checked ? 'translate-x-4' : ''}`} />
-      </span>
-    </button>
-  )
-}
-
 interface Props {
   value: ExecutionConfig
   onChange: (patch: Partial<ExecutionConfig>) => void
@@ -152,7 +132,7 @@ export function ExecutionConfigForm({ value, onChange }: Props) {
           placeholder={t('strategies.config.auto')}
           onChange={(v) => onChange({ poll_seconds: v })} />
       </div>
-      <Toggle label={t('strategies.config.allowShort')} checked={value.allow_short}
+      <Switch label={t('strategies.config.allowShort')} checked={value.allow_short}
         onChange={(v) => onChange({ allow_short: v })} />
 
       {/* Risk overrides — blank ⇒ inherit the user's risk profile (Settings). */}

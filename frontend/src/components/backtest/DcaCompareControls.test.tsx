@@ -5,15 +5,17 @@ import { DcaCompareControls } from './DcaCompareControls'
 import { DEFAULT_DCA_PARAMS, DCA_PRESETS, mergeDcaParams } from '@/lib/dcaCompareParams'
 
 function setup(overrides: Partial<React.ComponentProps<typeof DcaCompareControls>> = {}) {
-  const props = {
+  const onChange = vi.fn()
+  const onRun = vi.fn()
+  const props: React.ComponentProps<typeof DcaCompareControls> = {
     params: DEFAULT_DCA_PARAMS,
-    onChange: vi.fn(),
-    onRun: vi.fn(),
+    onChange,
+    onRun,
     isPending: false,
     ...overrides,
   }
   render(<DcaCompareControls {...props} />)
-  return props
+  return { ...props, onChange, onRun }
 }
 
 describe('DcaCompareControls', () => {
@@ -29,7 +31,7 @@ describe('DcaCompareControls', () => {
     await userEvent.click(screen.getByRole('button', { name: /tune parameters/i }))
     fireEvent.change(screen.getByLabelText('Days to top'), { target: { value: '600' } })
     expect(onChange).toHaveBeenCalled()
-    const last = onChange.mock.calls.at(-1)![0]
+    const last = onChange.mock.calls.slice(-1)[0][0]
     expect(last.cycle.days_to_top).toBe(600)
   })
 
@@ -58,7 +60,7 @@ describe('DcaCompareControls', () => {
     const { onChange } = setup()
     await userEvent.click(screen.getByRole('button', { name: /tune parameters/i }))
     await userEvent.selectOptions(screen.getByLabelText(/timing mode/i), 'windows')
-    expect(onChange.mock.calls.at(-1)![0].cycle.timing_mode).toBe('windows')
+    expect(onChange.mock.calls.slice(-1)[0][0].cycle.timing_mode).toBe('windows')
 
     // Re-render in windows mode (the parent owns the state) — now the day fields exist.
     setup({ params: mergeDcaParams({ cycle: { timing_mode: 'windows' } }) })
@@ -72,7 +74,7 @@ describe('DcaCompareControls', () => {
     })
     await userEvent.click(screen.getByRole('button', { name: /tune parameters/i }))
     fireEvent.change(screen.getByLabelText(/start selling/i), { target: { value: '' } })
-    expect(onChange.mock.calls.at(-1)![0].cycle.sell_start_day).toBeNull()
+    expect(onChange.mock.calls.slice(-1)[0][0].cycle.sell_start_day).toBeNull()
   })
 
   it('fires onRun when the run button is clicked', async () => {

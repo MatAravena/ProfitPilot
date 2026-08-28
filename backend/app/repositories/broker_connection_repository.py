@@ -22,11 +22,16 @@ class BrokerConnectionRepository(BaseRepository[BrokerConnection]):
         )
         return list(result.scalars().all())
 
-    async def get_by_user_and_broker(self, user_id: UUID, broker_id: str) -> Optional[BrokerConnection]:
+    async def get_by_user_broker_and_mode(
+        self, user_id: UUID, broker_id: str, is_paper: bool,
+    ) -> Optional[BrokerConnection]:
+        """The active connection for (broker, paper|live) — paper and live are separate
+        accounts on the same broker, so they don't collide with each other."""
         result = await self._session.execute(
             select(BrokerConnection).where(
                 BrokerConnection.user_id == user_id,
                 BrokerConnection.broker_id == broker_id,
+                BrokerConnection.is_paper == is_paper,
                 BrokerConnection.is_active == True,  # noqa: E712
             )
         )

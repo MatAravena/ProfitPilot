@@ -60,6 +60,10 @@ class PlaceOrderRequest(BaseModel):
     symbol: str = Field(..., min_length=1, max_length=32)
     side: str = Field(..., pattern="^(buy|sell)$")
     order_type: str = Field(..., pattern="^(market|limit)$")
+    # What `quantity` means: base-asset units, fiat notional to spend/receive, or a
+    # percent (1-100) of the currently held position size. One field, three readings —
+    # avoids three near-duplicate quantity fields for what is the same "how much" input.
+    amount_type: str = Field("quantity", pattern="^(quantity|notional|percent)$")
     quantity: float = Field(..., gt=0)
     limit_price: Optional[float] = Field(None, gt=0)
     time_in_force: str = Field("gtc", pattern="^(day|gtc|ioc|fok)$")

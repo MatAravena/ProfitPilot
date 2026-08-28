@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.deps import get_broker_service, get_current_user
+from app.domain.instruments import InstrumentError
 from app.models.db.user import User
 from app.models.schemas.broker_schemas import (
     AccountResponse,
@@ -43,11 +44,11 @@ async def disconnect_broker(connection_id: UUID, user: CurrentUser, svc: BrokerS
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
 
-@router.get("/{broker_id}/account", response_model=AccountResponse)
-async def get_broker_account(broker_id: str, user: CurrentUser, svc: BrokerSvc):
-    """Fetch live account info from a specific broker."""
+@router.get("/{connection_id}/account", response_model=AccountResponse)
+async def get_broker_account(connection_id: UUID, user: CurrentUser, svc: BrokerSvc):
+    """Fetch live account info from a specific broker connection."""
     try:
-        account = await svc.get_account(user.id, broker_id)
+        account = await svc.get_account(user.id, connection_id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     except Exception as exc:
@@ -64,11 +65,11 @@ async def get_broker_account(broker_id: str, user: CurrentUser, svc: BrokerSvc):
     )
 
 
-@router.get("/{broker_id}/positions", response_model=List[PositionResponse])
-async def get_broker_positions(broker_id: str, user: CurrentUser, svc: BrokerSvc):
-    """Fetch open positions from a specific broker."""
+@router.get("/{connection_id}/positions", response_model=List[PositionResponse])
+async def get_broker_positions(connection_id: UUID, user: CurrentUser, svc: BrokerSvc):
+    """Fetch open positions from a specific broker connection."""
     try:
-        positions = await svc.get_positions(user.id, broker_id)
+        positions = await svc.get_positions(user.id, connection_id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     except Exception as exc:
@@ -89,13 +90,15 @@ async def get_broker_positions(broker_id: str, user: CurrentUser, svc: BrokerSvc
     ]
 
 
-@router.post("/{broker_id}/orders", response_model=OrderResultResponse, status_code=status.HTTP_201_CREATED)
-async def place_order(broker_id: str, req: PlaceOrderRequest, user: CurrentUser, svc: BrokerSvc):
+@router.post("/{connection_id}/orders", response_model=OrderResultResponse, status_code=status.HTTP_201_CREATED)
+async def place_order(connection_id: UUID, req: PlaceOrderRequest, user: CurrentUser, svc: BrokerSvc):
     """Place a market or limit order on a connected broker."""
     try:
-        result = await svc.place_order(user.id, broker_id, req)
+        result = await svc.place_order(user.id, connection_id, req)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except InstrumentError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Broker error: {exc}")
     return OrderResultResponse(

@@ -35,9 +35,8 @@ from app.domain.instruments import (
     INSTRUMENTS,
     InstrumentCatalog,
     InstrumentViolation,
+    conform_close,
     conform_order,
-    floor_to_step,
-    round_to_tick,
 )
 from app.domain.risk.risk_manager import RiskManager
 
@@ -230,11 +229,6 @@ class ExecutionEngine:
             )
             self._log.warning("execution.instrument_unknown", symbol=symbol)
             return ExecutionOutcome(action=ACTION_REJECTED, reason=reason, order=order)
-        elif instrument is None:
-            # Unseeded + closing: pass through unconformed rather than blocking the exit —
-            # a position already held must always be closable, even for a symbol the
-            # catalog has never heard of (it predates the registry, or the seed lagged).
-            self._log.warning("execution.instrument_unseeded_close", symbol=symbol)
         elif open_position:
             # Opens are validated and can be rejected — an order too small to be worth
             # the exchange's minimum should never open a position in the first place.
@@ -254,12 +248,15 @@ class ExecutionEngine:
                                   rule=exc.rule, error=str(exc))
                 return ExecutionOutcome(action=ACTION_REJECTED, reason=str(exc), order=order)
         else:
-            # Closes always execute — quantize only, never blocked by a min-size
-            # violation the position may have drifted below (same rule as the risk veto:
-            # a stop-loss/close must never be refused). Same reasoning as the ACTION_REJECTED
-            # path above not applying here.
-            conformed_qty = floor_to_step(qty, instrument.lot_step)
-            conformed_price = round_to_tick(latest_close, instrument.tick_size)
+            # Close — always executes, seeded or not, per `conform_close`'s contract (a
+            # held position must always be exitable). `instrument` may be None here; the
+            # unseeded case is handled inside `conform_close` itself, not branched here,
+            # so this policy has exactly one place to change instead of two.
+            if instrument is None:
+                self._log.warning("execution.instrument_unseeded_close", symbol=symbol)
+            conformed_qty, conformed_price = conform_close(
+                instrument, quantity=qty, price=latest_close,
+            )
 
         order = Order(
             order_id=uuid.uuid4(),
