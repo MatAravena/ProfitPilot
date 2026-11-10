@@ -232,6 +232,88 @@
           "windows": "Discrete windows"
         }
       }
+    },
+    "grid": {
+      "title": "Grid bot (backtest only)",
+      "run": "Run grid backtest",
+      "running": "Running grid…",
+      "note": "Backtest only — the live executor is single-position and cannot drive a rung ladder.",
+      "attribution": "Return attribution",
+      "gridIncome": "Grid income (realized)",
+      "markToMarket": "Inventory mark-to-market",
+      "attributionHint": "Grid income is realized profit from matched rung pairs. Mark-to-market is unrealized drift on inventory still held — most grid-bot \"profit\" is really this.",
+      "metric": {
+        "label": "Metric",
+        "final_equity": "Final equity",
+        "total_return_pct": "Total return",
+        "grid_realized_pnl": "Grid income (realized)",
+        "mark_to_market_pnl": "Inventory mark-to-market",
+        "grid_trades": "Completed grids",
+        "avg_profit_per_grid_pct": "Avg profit / grid",
+        "forced_exit_pnl": "Forced exit P&L",
+        "force_close_count": "Forced exits",
+        "max_drawdown_pct": "Max drawdown",
+        "sharpe_ratio": "Sharpe",
+        "fill_rate": "Fill rate",
+        "time_in_grid_pct": "Time holding inventory",
+        "max_inventory_notional": "Peak inventory",
+        "worst_unrealized_pct": "Worst unrealized",
+        "time_underwater_pct": "Time underwater"
+      },
+      "arm": {
+        "grid_guarded_reanchor": "Guarded re-anchor (bounded)",
+        "grid_accumulate_nostop": "Accumulate, no stop (unbounded)"
+      },
+      "armHint": {
+        "grid_guarded_reanchor": "Exits only when the range breaks against the bias and Supertrend confirms, so a wick doesn't stop you out. Bounded loss — the deployable arm.",
+        "grid_accumulate_nostop": "Never stops. Extends the ladder instead, capped at max extensions. Unbounded exposure by construction — read the disclosure metrics."
+      },
+      "params": {
+        "tune": "Tune parameters",
+        "preset": "Preset",
+        "reset": "Reset to defaults",
+        "presetName": {
+          "custom": "Custom",
+          "default": "Default",
+          "tight": "Tight ladder (more, smaller rungs)",
+          "wide": "Wide ladder (fewer, bigger rungs)"
+        },
+        "group": {
+          "grid": "Ladder geometry & costs",
+          "regime": "Regime detection"
+        },
+        "spacingMode": {
+          "geometric": "Geometric (constant %)",
+          "arithmetic": "Arithmetic (constant $)"
+        },
+        "field": {
+          "spacing_mode": "Spacing mode",
+          "range_atr_mult": "Range width (× ATR)",
+          "spacing_atr_mult": "Rung spacing (× ATR)",
+          "min_edge": "Min edge (× costs)",
+          "min_rungs": "Min rungs",
+          "max_rungs": "Max rungs",
+          "fee_pct": "Fee",
+          "slippage_pct": "Slippage",
+          "max_extensions": "Max extensions",
+          "reanchor_buffer_pct": "Re-anchor buffer",
+          "cooldown_bars": "Cooldown bars",
+          "ema_fast": "EMA fast",
+          "ema_mid": "EMA mid",
+          "ema_slow": "EMA slow",
+          "atr_period": "ATR period",
+          "atr_vol_low": "Vol band low",
+          "atr_vol_high": "Vol band high",
+          "bb_period": "Bollinger period",
+          "bb_std": "Bollinger std",
+          "squeeze_pctile": "Squeeze percentile",
+          "atr_pctile_window": "ATR percentile window",
+          "bandwidth_pctile_window": "Bandwidth percentile window",
+          "swing_confirm_bars": "Swing confirm bars",
+          "supertrend_period": "Supertrend period",
+          "supertrend_mult": "Supertrend multiplier"
+        }
+      }
     }
   },
   "portfolio": {

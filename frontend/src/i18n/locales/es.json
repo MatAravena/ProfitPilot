@@ -121,6 +121,11 @@
       "pnl": "P&L",
       "pnlPct": "P&L %"
     },
+    "pagination": {
+      "showing": "{{from}}–{{to}} de {{total}}",
+      "prev": "Ant.",
+      "next": "Sig."
+    },
     "stopLoss": "Stop loss %",
     "takeProfit": "Take profit %",
     "slippage": "Deslizamiento",
@@ -225,6 +230,88 @@
         "timingMode": {
           "gaussian": "Curvas gaussianas",
           "windows": "Ventanas discretas"
+        }
+      }
+    },
+    "grid": {
+      "title": "Bot de grilla (solo backtest)",
+      "run": "Ejecutar backtest de grilla",
+      "running": "Ejecutando grilla…",
+      "note": "Solo backtest — el ejecutor en vivo es de posición única y no puede manejar una escalera de órdenes.",
+      "attribution": "Atribución del retorno",
+      "gridIncome": "Ingreso de grilla (realizado)",
+      "markToMarket": "Inventario a precio de mercado",
+      "attributionHint": "El ingreso de grilla es la ganancia realizada de pares de peldaños cerrados. El valor a mercado es la deriva no realizada del inventario aún en cartera — la mayor parte de la \"ganancia\" de un bot de grilla es en realidad esto.",
+      "metric": {
+        "label": "Métrica",
+        "final_equity": "Capital final",
+        "total_return_pct": "Retorno total",
+        "grid_realized_pnl": "Ingreso de grilla (realizado)",
+        "mark_to_market_pnl": "Inventario a precio de mercado",
+        "grid_trades": "Grillas completadas",
+        "avg_profit_per_grid_pct": "Ganancia media / grilla",
+        "forced_exit_pnl": "P&L de salidas forzadas",
+        "force_close_count": "Salidas forzadas",
+        "max_drawdown_pct": "Caída máxima",
+        "sharpe_ratio": "Sharpe",
+        "fill_rate": "Tasa de ejecución",
+        "time_in_grid_pct": "Tiempo con inventario",
+        "max_inventory_notional": "Inventario máximo",
+        "worst_unrealized_pct": "Peor no realizado",
+        "time_underwater_pct": "Tiempo bajo el agua"
+      },
+      "arm": {
+        "grid_guarded_reanchor": "Reanclaje protegido (acotado)",
+        "grid_accumulate_nostop": "Acumular sin stop (no acotado)"
+      },
+      "armHint": {
+        "grid_guarded_reanchor": "Sale solo cuando el rango se rompe en contra del sesgo y Supertrend lo confirma, así una mecha no te saca. Pérdida acotada — el brazo desplegable.",
+        "grid_accumulate_nostop": "Nunca sale. Extiende la escalera, con un tope de extensiones. Exposición no acotada por construcción — mirá las métricas de divulgación."
+      },
+      "params": {
+        "tune": "Ajustar parámetros",
+        "preset": "Preajuste",
+        "reset": "Restablecer valores por defecto",
+        "presetName": {
+          "custom": "Personalizado",
+          "default": "Por defecto",
+          "tight": "Escalera densa (más peldaños, más chicos)",
+          "wide": "Escalera amplia (menos peldaños, más grandes)"
+        },
+        "group": {
+          "grid": "Geometría de la escalera y costos",
+          "regime": "Detección de régimen"
+        },
+        "spacingMode": {
+          "geometric": "Geométrico (% constante)",
+          "arithmetic": "Aritmético ($ constante)"
+        },
+        "field": {
+          "spacing_mode": "Modo de espaciado",
+          "range_atr_mult": "Ancho del rango (× ATR)",
+          "spacing_atr_mult": "Espaciado de peldaños (× ATR)",
+          "min_edge": "Margen mínimo (× costos)",
+          "min_rungs": "Peldaños mínimos",
+          "max_rungs": "Peldaños máximos",
+          "fee_pct": "Comisión",
+          "slippage_pct": "Deslizamiento",
+          "max_extensions": "Extensiones máximas",
+          "reanchor_buffer_pct": "Margen de reanclaje",
+          "cooldown_bars": "Barras de enfriamiento",
+          "ema_fast": "EMA rápida",
+          "ema_mid": "EMA media",
+          "ema_slow": "EMA lenta",
+          "atr_period": "Período ATR",
+          "atr_vol_low": "Banda de vol. inferior",
+          "atr_vol_high": "Banda de vol. superior",
+          "bb_period": "Período Bollinger",
+          "bb_std": "Desvío Bollinger",
+          "squeeze_pctile": "Percentil de compresión",
+          "atr_pctile_window": "Ventana percentil ATR",
+          "bandwidth_pctile_window": "Ventana percentil de amplitud",
+          "swing_confirm_bars": "Barras de confirmación de pivote",
+          "supertrend_period": "Período Supertrend",
+          "supertrend_mult": "Multiplicador Supertrend"
         }
       }
     }
@@ -417,11 +504,6 @@
       "size": "Tamaño",
       "pnl": "P&L",
       "pnlPct": "P&L %"
-    },
-    "pagination": {
-      "showing": "{{from}}–{{to}} de {{total}}",
-      "prev": "Ant.",
-      "next": "Sig."
     }
   },
   "settings": {

@@ -5,7 +5,7 @@ import { Play, TrendingUp, TrendingDown, Activity, BarChart2, Award, AlertTriang
 import { api } from '@/lib/api'
 import { friendlyError } from '@/lib/errors'
 import { useToastStore } from '@/stores/toast'
-import type { BacktestRequest, BacktestResponse, BacktestMetrics, StrategyMeta, MonteCarloResponse, DcaCompareResponse } from '@/types/backtest'
+import type { BacktestRequest, BacktestResponse, BacktestMetrics, StrategyMeta, MonteCarloResponse, DcaCompareResponse, GridResponse } from '@/types/backtest'
 import type { StrategyInstance } from '@/types'
 import { formatCurrency, formatPercent } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
@@ -19,6 +19,9 @@ import { MonteCarloPanel } from '@/components/backtest/MonteCarloPanel'
 import { DcaComparePanel } from '@/components/backtest/DcaComparePanel'
 import { DcaCompareControls } from '@/components/backtest/DcaCompareControls'
 import { loadDcaParams, saveDcaParams } from '@/lib/dcaCompareParams'
+import { GridPanel } from '@/components/backtest/GridPanel'
+import { GridControls } from '@/components/backtest/GridControls'
+import { loadGridParams, saveGridParams } from '@/lib/gridParams'
 
 const TIMEFRAMES = ['1m', '5m', '15m', '1h', '4h', '1d'] as const
 const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT']
@@ -50,6 +53,9 @@ export function Backtests() {
   const [dcaResult, setDcaResult] = useState<DcaCompareResponse | null>(null)
   // Tunable per-arm params for the DCA comparison, persisted across reloads.
   const [dcaParams, setDcaParams] = useState(loadDcaParams)
+  const [gridResult, setGridResult] = useState<GridResponse | null>(null)
+  // Tunable geometry/regime params for the grid backtest, persisted across reloads.
+  const [gridParams, setGridParams] = useState(loadGridParams)
 
   const { data: available } = useQuery({
     queryKey: ['backtests', 'strategies'],
@@ -93,6 +99,24 @@ export function Backtests() {
 
   // Persist tuning across reloads so an experiment survives a refresh.
   useEffect(() => saveDcaParams(dcaParams), [dcaParams])
+
+  // Grid backtest — opt-in; runs a purpose-built grid simulator server-side. Unlike dca-compare
+  // (halving clock is daily), a grid works on any timeframe, so pass the form's own selection.
+  const gridRun = useMutation({
+    mutationFn: () => api.backtests.grid({
+      symbol: form.symbol,
+      timeframe: form.timeframe,
+      start: startDate ? new Date(startDate).toISOString() : undefined,
+      end: endDate ? new Date(endDate).toISOString() : undefined,
+      initial_capital: form.initial_capital,
+      grid: gridParams.grid,
+      regime: gridParams.regime,
+    }),
+    onSuccess: (data) => setGridResult(data),
+    onError: (err) => toastError(err),
+  })
+
+  useEffect(() => saveGridParams(gridParams), [gridParams])
 
   // Pre-fill SL/TP from the user's risk defaults (adjustable per run).
   const { data: riskProfile } = useQuery({ queryKey: ['risk-profile'], queryFn: api.settings.getRisk })
@@ -145,6 +169,7 @@ export function Backtests() {
     setResult(null)
     setMcResult(null)   // a fresh backtest invalidates the previous MC run
     setDcaResult(null)  // ...and the previous DCA comparison
+    setGridResult(null) // ...and the previous grid run
     const req: BacktestRequest = {
       ...form,
       start: startDate ? new Date(startDate).toISOString() : undefined,
@@ -457,6 +482,16 @@ export function Backtests() {
                 isPending={dcaCompare.isPending}
               />
               {dcaResult && <DcaComparePanel result={dcaResult} />}
+
+              {/* Grid bot — opt-in, backtest-only. Controls stay visible so the user can re-tune
+                  geometry and re-run; results render below when present. */}
+              <GridControls
+                params={gridParams}
+                onChange={setGridParams}
+                onRun={() => gridRun.mutate()}
+                isPending={gridRun.isPending}
+              />
+              {gridResult && <GridPanel result={gridResult} />}
             </>
           )}
         </div>

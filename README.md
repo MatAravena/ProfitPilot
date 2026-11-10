@@ -311,6 +311,65 @@ adapt `expected_bear_drop`/sell-fraction per cycle as BTC matures and bears get 
 fixed-capital rebalancer across **two volatile assets** (BTC/ETH or BTC/gold) where the harvest can
 actually out-earn holding. Contributions welcome.
 
+### Grid bot — does a rung ladder actually earn, or is it just beta on the bag?
+
+**Backtest-only** (`POST /api/v1/backtests/grid`). A grid bot places a ladder of resting limit orders
+and earns a small profit each time price oscillates between two rungs. The honest question is whether
+that income is real, or whether the "profit" is just mark-to-market drift on inventory you were
+forced to hold — so the scoreboard **splits realized grid income from inventory mark-to-market**
+rather than reporting one blended number.
+
+Lives in its own pure-domain module, `domain/strategies/grid/`, one file per responsibility:
+`params.py` (frozen knobs) · `levels.py` (rung geometry) · `regime.py` (regime gates) · `planner.py`
+(causal per-bar plan) · `ledger.py` (per-rung lot accounting) · `policies.py` (the two arms) ·
+`simulator.py` (bar loop + scoreboard). It is a **third purpose-built simulator** alongside
+`BacktestEngine` (single-position/flip-based) and `accumulation.py` (multi-buy) — a grid needs
+multi-level resting orders that neither can express. The one shared contract is
+`domain/strategies/base/ledger.py::Ledger` (`equity(price) -> float`).
+
+**Geometry.** Range half-width `3.0 × ATR` centred on the **Bollinger mid, not spot** (anchoring at
+spot puts half the ladder instantly underwater), clipped to the last *confirmed* swing high/low so
+the grid never extends past structure. Spacing is
+`max(0.30 × ATR, min_edge × 2 × (fee + slippage))` — **that second term is the cost floor, and
+omitting it is the #1 reason retail grid bots bleed**: rungs closer together than round-trip costs
+lose money on every cycle. `min_edge` defaults to `3` (rungs must clear 3× costs). Geometric spacing
+by default — constant % per rung means constant % profit per rung, which suits lognormal crypto
+returns better than arithmetic rungs that pay unevenly.
+
+**Regime is symmetric** (`regime.py`), so the grid can lean *into* a downtrend instead of only
+falling back to a neutral ladder: `LONG_BIASED` / `SHORT_BIASED` / `NEUTRAL` / `FLAT`. The volatility
+gate is **a band, not a floor** (`0.35 ≤ ATR percentile ≤ 0.90`) — too quiet starves the grid, too
+wild breaks the range. Direction (regime) and risk posture (policy) are deliberately **orthogonal**:
+a policy answers "what happens when the range breaks", never "which way to trade".
+
+| Arm | What it does | What it *is* |
+|---|---|---|
+| `grid_guarded_reanchor` | Exits only when the range breaks against the active bias **and** Supertrend confirms, so a wick doesn't stop you out; then flat + cooldown until the vol gate reopens. | **Bounded loss — the deployable one.** |
+| `grid_accumulate_nostop` | No stop. Extends the ladder further from remaining budget, capped at `max_extensions`. | **Unbounded exposure by construction.** Reports `max_inventory_notional`, `worst_unrealized_pct`, `time_underwater_pct` so the failure mode is disclosed, not hidden. |
+
+**Fill realism — where grid backtests usually lie.** Rungs are limit orders: they fill *at the rung
+price* with maker fees and no slippage. Forced exits are taker + slippage. Mixing these up is roughly
+a 2× error on net edge per rung. A lot's exit is a **resting limit order at a fixed price** — a long
+lot's sell fills once `bar.high` reaches it, a short lot's buy-back once `bar.low` does — so targets
+the price *gapped through* still fill, as a real resting order would. `allow_intrabar_roundtrip` is
+`False` by default: letting one bar fill a buy on its low and the paired sell on its high is the
+classic way a grid backtest prints money that never existed. Profit is realized per **matched lot
+pair**, never average-cost drift.
+
+**Causality is enforced by test, not by assertion.** Swing pivots are only confirmed N bars *after*
+the fact, which is a live look-ahead trap. A golden test truncates the bar series and asserts every
+earlier plan is byte-identical — and it is checked to run against live ladders (not an all-FLAT
+series that would pass trivially).
+
+⚠️ **Disclosed gap:** `SHORT_BIASED` legs do **not** model perp funding-rate cost. The API response
+and the eventual UI carry this caveat; short-biased results are optimistic by that amount.
+
+> **Status:** backend + UI. `GridControls` (tuning form, presets, persisted) and `GridPanel`
+> (overlaid equity curves, return attribution, per-arm disclosure metrics) are on the Backtests
+> page, en/es translated. **No validation sweep has been run, so there are still no performance
+> claims.** Not live-deployable: the live `ExecutionEngine` is single-position/flip-based and
+> can't drive multi-level resting orders.
+
 ### What this means for you (user side)
 
 - A good backtest is **necessary, not sufficient.** Keep `slippage_pct`, commission, and

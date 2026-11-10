@@ -25,8 +25,15 @@ from app.models.schemas.backtest_schemas import (
     PricePointResponse,
     TradeRecordResponse,
 )
+from app.models.schemas.grid_schemas import (
+    FUNDING_CAVEAT_TEXT,
+    GridArmResultResponse,
+    GridRequest,
+    GridResponse,
+)
 from app.services.accumulation_compare_service import AccumulationCompareService
 from app.services.backtest_service import BacktestService
+from app.services.grid_service import GridService
 from app.services.monte_carlo_service import MonteCarloService
 
 router = APIRouter(prefix="/backtests", tags=["backtests"])
@@ -36,6 +43,7 @@ logger = structlog.get_logger(__name__)
 _svc = BacktestService()
 _mc_svc = MonteCarloService(_svc)
 _dca_svc = AccumulationCompareService(_svc)
+_grid_svc = GridService(_svc)
 
 
 @router.get("/strategies", response_model=AvailableStrategiesResponse)
@@ -168,5 +176,44 @@ async def run_dca_compare(req: DcaCompareRequest):
         capital_model=bundle.capital_model,
         caveat=CAVEAT_TEXT,
         cycle_markers=[CycleMarker(timestamp=_marker_ts(d), kind=kind) for d, kind in bundle.cycle_markers],
+        arms={name: _arm(a) for name, a in bundle.arms.items()},
+    )
+
+
+@router.post("/grid", response_model=GridResponse)
+async def run_grid(req: GridRequest):
+    """Backtest-only grid family: two arms (bounded-loss grid_guarded_reanchor vs. unbounded
+    grid_accumulate_nostop) over identical data, with a symmetric long/short regime.
+
+    `< MIN_BACKTEST_BARS` bars or an unknown timeframe -> 400. SHORT_BIASED legs carry a
+    disclosed funding-rate caveat (see FUNDING_CAVEAT_TEXT) — not modeled for v1.
+    """
+    try:
+        bundle = await _grid_svc.run(req)
+    except ValueError as exc:
+        raise AppError(str(exc), code=ErrorCode.BAD_REQUEST) from exc
+    except AppError:
+        raise
+    except Exception as exc:
+        logger.error("grid.failed", symbol=req.symbol, error=str(exc), exc_info=exc)
+        raise BacktestError(f"Grid backtest failed: {exc}") from exc
+
+    def _arm(a) -> GridArmResultResponse:
+        return GridArmResultResponse(
+            equity_curve=[EquityPointResponse(timestamp=p.timestamp, value=p.value) for p in a.equity_curve],
+            final_equity=a.final_equity, total_return_pct=a.total_return_pct,
+            max_drawdown_pct=a.max_drawdown_pct, sharpe_ratio=a.sharpe_ratio,
+            grid_trades=a.grid_trades, grid_realized_pnl=a.grid_realized_pnl,
+            forced_exit_pnl=a.forced_exit_pnl, force_close_count=a.force_close_count,
+            mark_to_market_pnl=a.mark_to_market_pnl, avg_profit_per_grid_pct=a.avg_profit_per_grid_pct,
+            fill_rate=a.fill_rate, time_in_grid_pct=a.time_in_grid_pct,
+            max_inventory_notional=a.max_inventory_notional, worst_unrealized_pct=a.worst_unrealized_pct,
+            time_underwater_pct=a.time_underwater_pct,
+        )
+
+    return GridResponse(
+        symbol=bundle.symbol, timeframe=bundle.timeframe,
+        allow_intrabar_roundtrip=bundle.allow_intrabar_roundtrip,
+        funding_rate_caveat=FUNDING_CAVEAT_TEXT,
         arms={name: _arm(a) for name, a in bundle.arms.items()},
     )

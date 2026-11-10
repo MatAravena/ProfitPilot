@@ -19,6 +19,8 @@ import type {
   BacktestResponse,
   DcaCompareRequest,
   DcaCompareResponse,
+  GridRequest,
+  GridResponse,
   MonteCarloRequest,
   MonteCarloResponse,
   PortfolioSummary,
@@ -149,6 +151,8 @@ export const api = {
       request<MonteCarloResponse>('/backtests/montecarlo', { method: 'POST', body: JSON.stringify(body) }),
     dcaCompare: (body: DcaCompareRequest) =>
       request<DcaCompareResponse>('/backtests/dca-compare', { method: 'POST', body: JSON.stringify(body) }),
+    grid: (body: GridRequest) =>
+      request<GridResponse>('/backtests/grid', { method: 'POST', body: JSON.stringify(body) }),
   },
 
   builder: {

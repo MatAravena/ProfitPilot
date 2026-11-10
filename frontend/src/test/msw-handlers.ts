@@ -56,6 +56,39 @@ export const handlers = [
     })
   ),
 
+  http.post('/api/v1/backtests/grid', () =>
+    HttpResponse.json({
+      symbol: 'BTCUSDT',
+      timeframe: '1h',
+      allow_intrabar_roundtrip: false,
+      funding_rate_caveat: 'SHORT_BIASED grid legs omit perp funding-rate cost.',
+      arms: {
+        grid_guarded_reanchor: {
+          equity_curve: [
+            { timestamp: 1700000000000, value: 10000 },
+            { timestamp: 1700086400000, value: 10120 },
+          ],
+          final_equity: 10120, total_return_pct: 1.2, max_drawdown_pct: 3.4, sharpe_ratio: 0.9,
+          grid_trades: 50, grid_realized_pnl: 260, forced_exit_pnl: -20, force_close_count: 1,
+          mark_to_market_pnl: -120,
+          avg_profit_per_grid_pct: 0.26, fill_rate: 52.7, time_in_grid_pct: 86,
+          max_inventory_notional: 1052, worst_unrealized_pct: 4.1, time_underwater_pct: 40,
+        },
+        grid_accumulate_nostop: {
+          equity_curve: [
+            { timestamp: 1700000000000, value: 10000 },
+            { timestamp: 1700086400000, value: 9800 },
+          ],
+          final_equity: 9800, total_return_pct: -2, max_drawdown_pct: 9.9, sharpe_ratio: -0.3,
+          grid_trades: 61, grid_realized_pnl: 310, forced_exit_pnl: 0, force_close_count: 0,
+          mark_to_market_pnl: -510,
+          avg_profit_per_grid_pct: 0.25, fill_rate: 60.1, time_in_grid_pct: 92,
+          max_inventory_notional: 4200, worst_unrealized_pct: 12.5, time_underwater_pct: 71,
+        },
+      },
+    })
+  ),
+
   http.get('/api/v1/settings/risk', () => HttpResponse.json({
     stop_loss_pct: 0.015, take_profit_pct: null, max_open_positions: 5,
     max_daily_drawdown_pct: 0.03, max_total_drawdown_pct: 0.10,

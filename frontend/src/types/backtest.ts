@@ -207,3 +207,54 @@ export interface PortfolioPosition {
   unrealized_pnl_pct: number
   opened_at: string
 }
+
+// --- Grid bot (mirrors backend GridResponse in app/models/schemas/grid_schemas.py) ---
+
+import type { GridBlockParams, RegimeBlockParams } from '@/lib/gridParams'
+
+export interface GridArmResult {
+  equity_curve: EquityPoint[]
+  final_equity: number
+  total_return_pct: number
+  max_drawdown_pct: number
+  sharpe_ratio: number
+  grid_trades: number
+  /** Realized P&L from matched rung pairs — the actual grid income. */
+  grid_realized_pnl: number
+  /** P&L from guard-triggered forced exits — NOT grid income, and not mark-to-market drift
+   *  either. Reported separately so grid_realized_pnl + forced_exit_pnl + mark_to_market_pnl
+   *  actually reconciles to total_return_pct. */
+  forced_exit_pnl: number
+  /** How many times a policy's guard fired a full forced close (e.g. GuardedReanchorPolicy's
+   *  reanchor exit). The guarded arm's headline risk stat. */
+  force_close_count: number
+  /** Everything else: unrealized drift on inventory still held. Kept separate on purpose. */
+  mark_to_market_pnl: number
+  avg_profit_per_grid_pct: number
+  fill_rate: number
+  time_in_grid_pct: number
+  max_inventory_notional: number
+  worst_unrealized_pct: number
+  time_underwater_pct: number
+}
+
+export interface GridResponse {
+  symbol: string
+  timeframe: string
+  allow_intrabar_roundtrip: boolean
+  /** SHORT_BIASED legs omit perp funding cost — disclosed, not fixed, in v1. */
+  funding_rate_caveat: string
+  arms: Record<string, GridArmResult>
+}
+
+export interface GridRequest {
+  symbol: string
+  timeframe: string
+  start?: string
+  end?: string
+  initial_capital?: number
+  notional_per_rung?: number
+  allow_intrabar_roundtrip?: boolean
+  grid?: GridBlockParams
+  regime?: RegimeBlockParams
+}
