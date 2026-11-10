@@ -52,12 +52,16 @@ def test_accumulate_nostop_extends_range_when_broken_and_stops_at_max_extensions
     policy.prepare(bars=[], plan_series=None)
     plan = _plan(GridDirection.LONG_BIASED, [96, 98, 100, 102, 104], supertrend_bullish=False)
     broken_bar = _Bar(close=90.0)   # below the bottom rung
+    inside_bar = _Bar(close=100.0)
 
     ext1 = policy.extend_range_mult(0, broken_bar, plan, ledger=None)
-    ext2 = policy.extend_range_mult(1, broken_bar, plan, ledger=None)
-    ext3 = policy.extend_range_mult(2, broken_bar, plan, ledger=None)   # exceeds max_extensions=2
+    held = policy.extend_range_mult(1, broken_bar, plan, ledger=None)   # same episode: no new slot
+    assert policy.extend_range_mult(2, inside_bar, plan, ledger=None) is None   # episode ends
+    ext2 = policy.extend_range_mult(3, broken_bar, plan, ledger=None)
+    policy.extend_range_mult(4, inside_bar, plan, ledger=None)
+    ext3 = policy.extend_range_mult(5, broken_bar, plan, ledger=None)   # exceeds max_extensions=2
 
-    assert ext1 is not None and ext2 is not None
+    assert ext1 is not None and held == ext1
     assert ext2 > ext1 > params.range_atr_mult
     assert ext3 is None
 

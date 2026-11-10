@@ -35,3 +35,16 @@ def test_grid_arm_result_response_carries_the_forced_exit_pnl_split():
     )
     assert resp.forced_exit_pnl == -5.0
     assert resp.force_close_count == 1
+
+
+def test_rejects_min_rungs_above_max_rungs():
+    with pytest.raises(ValidationError):
+        GridParamsSchema(min_rungs=50, max_rungs=10)
+
+
+def test_rejects_inverted_vol_band_and_ema_order():
+    from app.models.schemas.grid_schemas import RegimeParamsSchema
+    with pytest.raises(ValidationError):
+        RegimeParamsSchema(atr_vol_low=0.9, atr_vol_high=0.35)
+    with pytest.raises(ValidationError):
+        RegimeParamsSchema(ema_fast=30, ema_mid=20)

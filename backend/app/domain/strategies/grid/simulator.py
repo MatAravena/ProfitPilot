@@ -61,6 +61,8 @@ def run_grid_backtest(
     bars_with_open_lots = 0
     bars_underwater = 0
     bars_with_active_plan = 0
+    bars_with_fills = 0
+    cooldown_until = -1
 
     for i, bar in enumerate(bars):
         ts_ms = int(bar.timestamp.timestamp() * 1000)
@@ -71,20 +73,28 @@ def run_grid_backtest(
         if plan is not None and plan.levels is not None:
             bars_with_active_plan += 1
 
+        activity_before = (ledger.lots_opened, ledger.grid_trades)
         if plan is None:
             pass
         elif policy.should_force_close(i, bar, plan, ledger):
             ledger.force_close_all(bar.close, ts_ms)
+            cooldown_until = i + grid_params.cooldown_bars
+        elif i <= cooldown_until:
+            pass   # stopped out: stay flat instead of reopening on the same broken ladder
         else:
-            ext_mult = policy.extend_range_mult(i, bar, plan, ledger)
+            # Decided on bars[i-1] -- the bar plans[i-1] came from -- never on bar i itself.
+            ext_mult = policy.extend_range_mult(i, bars[i - 1], plan, ledger)
             levels = plan.levels
             if ext_mult is not None and levels is not None:
                 extended_params = replace(grid_params, range_atr_mult=ext_mult)
+                # The extension is deliberately past structure, so no swing clamp -- clamping to
+                # the same pivot would just rebuild the unextended ladder.
                 levels = compute_levels(
                     center=levels.center, atr=plan_series.regime.atr[i - 1], params=extended_params,
-                    swing_high=plan.swing_high, swing_low=plan.swing_low,
                 )
             process_bar_fills(ledger, levels, plan.direction, bar, ts_ms, allow_intrabar_roundtrip)
+        if (ledger.lots_opened, ledger.grid_trades) != activity_before:
+            bars_with_fills += 1
 
         equity = ledger.equity(bar.close)
         equity_curve.append(EquityPoint(timestamp=ts_ms, value=equity))
@@ -92,8 +102,9 @@ def run_grid_backtest(
         inv = ledger.inventory_notional(bar.close)
         max_inventory = max(max_inventory, inv)
         if initial_capital > 0:
-            underwater_pct = max(0.0, (initial_capital - equity) / initial_capital * 100)
-            worst_unrealized_pct = max(worst_unrealized_pct, underwater_pct)
+            # Unrealized = open inventory only; realized losses already show in forced_exit_pnl.
+            unrealized = equity - initial_capital - ledger.realized_pnl
+            worst_unrealized_pct = max(worst_unrealized_pct, -unrealized / initial_capital * 100)
             if equity < initial_capital:
                 bars_underwater += 1
         if ledger.open_lots:
@@ -120,7 +131,8 @@ def run_grid_backtest(
             (ledger.grid_realized_pnl / ledger.grid_trades / notional_per_rung * 100)
             if ledger.grid_trades else 0.0, 3,
         ),
-        fill_rate=round(bars_with_active_plan / n * 100, 2),
+        # % of bars with a live ladder on which something actually filled (opened or closed).
+        fill_rate=round(bars_with_fills / bars_with_active_plan * 100, 2) if bars_with_active_plan else 0.0,
         time_in_grid_pct=round(bars_with_open_lots / n * 100, 2),
         max_inventory_notional=round(max_inventory, 2),
         worst_unrealized_pct=round(worst_unrealized_pct, 2),

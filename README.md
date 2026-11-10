@@ -344,8 +344,10 @@ a policy answers "what happens when the range breaks", never "which way to trade
 
 | Arm | What it does | What it *is* |
 |---|---|---|
-| `grid_guarded_reanchor` | Exits only when the range breaks against the active bias **and** Supertrend confirms, so a wick doesn't stop you out; then flat + cooldown until the vol gate reopens. | **Bounded loss — the deployable one.** |
-| `grid_accumulate_nostop` | No stop. Extends the ladder further from remaining budget, capped at `max_extensions`. | **Unbounded exposure by construction.** Reports `max_inventory_notional`, `worst_unrealized_pct`, `time_underwater_pct` so the failure mode is disclosed, not hidden. |
+| `grid_guarded_reanchor` | Exits only when the range breaks against the active bias **and** Supertrend confirms, so a wick doesn't stop you out; then stays flat for `cooldown_bars` instead of reopening on the same broken ladder. | **Bounded loss — the deployable one.** |
+| `grid_accumulate_nostop` | No stop. When the range breaks, widens the ladder past the swing pivot for as long as price stays outside it. Each break episode uses one of `max_extensions`. | **Unbounded exposure by construction.** Reports `max_inventory_notional`, `worst_unrealized_pct` (open inventory only), `time_underwater_pct` so the failure mode is disclosed, not hidden. |
+
+`fill_rate` is the share of bars with a live ladder on which something actually filled.
 
 **Fill realism — where grid backtests usually lie.** Rungs are limit orders: they fill *at the rung
 price* with maker fees and no slippage. Forced exits are taker + slippage. Mixing these up is roughly
@@ -353,7 +355,9 @@ a 2× error on net edge per rung. A lot's exit is a **resting limit order at a f
 lot's sell fills once `bar.high` reaches it, a short lot's buy-back once `bar.low` does — so targets
 the price *gapped through* still fill, as a real resting order would. `allow_intrabar_roundtrip` is
 `False` by default: letting one bar fill a buy on its low and the paired sell on its high is the
-classic way a grid backtest prints money that never existed. Profit is realized per **matched lot
+classic way a grid backtest prints money that never existed (set it `True` to see that optimistic
+upper bound). The no-stop arm's extension is decided on the previous bar's close, never on the bar
+it then fills in. Profit is realized per **matched lot
 pair**, never average-cost drift.
 
 **Causality is enforced by test, not by assertion.** Swing pivots are only confirmed N bars *after*

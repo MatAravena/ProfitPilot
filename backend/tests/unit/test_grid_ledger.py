@@ -191,3 +191,18 @@ def test_short_open_is_capped_by_max_open_lots_not_by_cash():
         process_bar_fills(ledger, levels, GridDirection.SHORT_BIASED, _Bar(), ts_ms=i,
                           allow_intrabar_roundtrip=False)
     assert len(ledger.open_lots) == 2   # the third open was refused by the cap
+
+
+def test_intrabar_roundtrip_flag_opens_and_closes_in_the_same_bar():
+    levels = GridLevels(center=100.0, step_pct=0.02, rungs=[96.0, 98.0, 100.0, 102.0, 104.0])
+
+    class _Bar:
+        low, high = 97.5, 100.5   # touches 98 and its target 100
+
+    strict, loose = _ledger(), _ledger()
+    process_bar_fills(strict, levels, GridDirection.LONG_BIASED, _Bar(), ts_ms=0,
+                      allow_intrabar_roundtrip=False)
+    process_bar_fills(loose, levels, GridDirection.LONG_BIASED, _Bar(), ts_ms=0,
+                      allow_intrabar_roundtrip=True)
+    assert strict.grid_trades == 0
+    assert loose.grid_trades >= 1 and loose.grid_realized_pnl > 0

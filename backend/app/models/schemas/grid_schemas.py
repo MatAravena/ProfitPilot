@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.core.datetime_utils import to_naive_utc
 from app.models.schemas.backtest_schemas import EquityPointResponse
@@ -27,6 +27,12 @@ class GridParamsSchema(BaseModel):
     reanchor_buffer_pct: float = Field(0.01, ge=0, le=0.5)
     cooldown_bars: int = Field(5, ge=0, le=500)
 
+    @model_validator(mode="after")
+    def check_rung_bounds(self) -> "GridParamsSchema":
+        if self.min_rungs > self.max_rungs:
+            raise ValueError("min_rungs must be <= max_rungs")
+        return self
+
 
 class RegimeParamsSchema(BaseModel):
     ema_fast: int = Field(9, ge=2, le=200)
@@ -43,6 +49,14 @@ class RegimeParamsSchema(BaseModel):
     swing_confirm_bars: int = Field(3, ge=1, le=50)
     supertrend_period: int = Field(10, ge=2, le=100)
     supertrend_mult: float = Field(3.0, gt=0, le=10)
+
+    @model_validator(mode="after")
+    def check_ordering(self) -> "RegimeParamsSchema":
+        if self.atr_vol_low >= self.atr_vol_high:
+            raise ValueError("atr_vol_low must be < atr_vol_high")
+        if not self.ema_fast < self.ema_mid < self.ema_slow:
+            raise ValueError("EMA periods must satisfy ema_fast < ema_mid < ema_slow")
+        return self
 
 
 class GridRequest(BaseModel):

@@ -32,9 +32,11 @@ def compute_levels(
     # base instead of ever exceeding range_high (infinite loop in _geometric_rungs below).
     range_low = max(center - half_width, center * 1e-3)
     range_high = center + half_width
-    if swing_low is not None:
+    # A stale pivot on the wrong side of center (price broke out past it) isn't structure for
+    # this ladder -- clamping to it would shove every rung to one side of center.
+    if swing_low is not None and swing_low < center:
         range_low = max(range_low, swing_low)
-    if swing_high is not None:
+    if swing_high is not None and swing_high > center:
         range_high = min(range_high, swing_high)
     if range_high <= range_low:
         range_high, range_low = center * 1.001, center * 0.999   # degenerate-range guard
@@ -90,8 +92,11 @@ def _clamp_rung_count(
         # range when the floor demands it; that is the honest outcome ("this instrument is too
         # quiet to grid at these costs"), not a bug to hide by cramming rungs in closer together.
         out = list(rungs) if rungs else [center]
+        floor = center * 1e-3   # same positivity floor as compute_levels
         grow_high = True
         while len(out) < params.min_rungs:
+            if not grow_high and spacing_mode != "geometric" and out[0] - step_pct * center < floor:
+                grow_high = True   # arithmetic can't step lower without going non-positive
             if grow_high:
                 nxt = out[-1] * (1 + step_pct) if spacing_mode == "geometric" else out[-1] + step_pct * center
                 out.append(nxt)

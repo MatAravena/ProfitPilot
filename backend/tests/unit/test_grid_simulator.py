@@ -203,3 +203,47 @@ def test_pnl_buckets_reconcile_to_total_return_including_forced_exits():
     implied_total_pnl = result.grid_realized_pnl + result.forced_exit_pnl + result.mark_to_market_pnl
     actual_total_pnl = result.final_equity - 10_000.0
     assert implied_total_pnl == pytest.approx(actual_total_pnl, abs=0.02)
+
+
+def _flat_bars(n, price=100.0):
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    return [OHLCV(timestamp=start + timedelta(hours=i), symbol="BTCUSDT", open=price,
+                  high=price + 0.5, low=price - 0.5, close=price, volume=1,
+                  timeframe=Timeframe.H1) for i in range(n)]
+
+
+def _constant_plan_series(n, levels):
+    plans = [GridPlan(direction=GridDirection.LONG_BIASED, levels=levels, supertrend_bullish=True,
+                      swing_high=None, swing_low=None) for _ in range(n)]
+    regime = RegimeSeries(direction=[p.direction for p in plans], supertrend_dir=[1] * n,
+                          bb_mid=[100.0] * n, atr=[1.0] * n, squeeze=[False] * n)
+    return GridPlanSeries(plans=plans, regime=regime)
+
+
+def test_extension_is_decided_on_the_previous_bar_not_the_bar_being_filled():
+    seen = []
+
+    class _Recorder(_NoOpPolicy):
+        def extend_range_mult(self, i, bar, plan, ledger):
+            seen.append((i, bar))
+            return None
+
+    bars = _flat_bars(4)
+    levels = GridLevels(center=100.0, step_pct=0.1, rungs=[90.0, 100.0, 110.0])
+    run_grid_backtest(bars, _constant_plan_series(4, levels), _Recorder(), GridParams(),
+                      initial_capital=10_000.0, notional_per_rung=200.0)
+    assert seen and all(bar is bars[i - 1] for i, bar in seen)
+
+
+def test_cooldown_keeps_the_grid_flat_after_a_forced_close():
+    class _StopOnceAtBar1(_NoOpPolicy):
+        def should_force_close(self, i, bar, plan, ledger):
+            return i == 1
+
+    bars = _flat_bars(6)
+    levels = GridLevels(center=100.0, step_pct=0.1, rungs=[90.0, 100.0, 110.0])
+    result = run_grid_backtest(bars, _constant_plan_series(6, levels), _StopOnceAtBar1(),
+                               GridParams(cooldown_bars=2),
+                               initial_capital=10_000.0, notional_per_rung=200.0)
+    # Stopped on bar 1, flat through bars 2-3, reopens on bar 4 -> lots open on bars 4 and 5 only.
+    assert result.time_in_grid_pct == pytest.approx(round(2 / 6 * 100, 2))

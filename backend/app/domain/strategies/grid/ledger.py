@@ -60,6 +60,10 @@ class GridLedger(Ledger):
         tol = abs(price) * tol_pct
         return any(abs(lot.entry_price - price) <= tol for lot in self.open_lots.values())
 
+    @property
+    def lots_opened(self) -> int:
+        return self._next_lot_id
+
     def open_long_lot(self, root_index: int, price: float, ts_ms: int, target: float) -> int:
         lot_id = self._next_lot_id
         self._next_lot_id += 1
@@ -216,6 +220,10 @@ def process_bar_fills(
         if is_long_side:
             if ledger.cash < ledger.notional_per_rung:
                 continue
-            ledger.open_long_lot(i, rungs[i], ts_ms, target_price)
+            lot_id = ledger.open_long_lot(i, rungs[i], ts_ms, target_price)
+            if target_index in crossed:   # only reachable with allow_intrabar_roundtrip (optimistic)
+                ledger.close_long_lot(lot_id, target_price)
         else:
-            ledger.open_short_lot(i, rungs[i], ts_ms, target_price)
+            lot_id = ledger.open_short_lot(i, rungs[i], ts_ms, target_price)
+            if target_index in crossed:
+                ledger.close_short_lot(lot_id, target_price)

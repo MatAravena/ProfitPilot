@@ -85,3 +85,17 @@ def _assert_every_gap_clears_floor(levels, params: GridParams) -> None:
     for a, b in zip(levels.rungs, levels.rungs[1:]):
         gap_pct = (b - a) / a
         assert gap_pct == pytest.approx(floor, abs=1e-9) or gap_pct > floor
+
+
+def test_arithmetic_extension_never_produces_non_positive_rungs():
+    params = GridParams(spacing_mode="arithmetic", spacing_atr_mult=5.0, min_rungs=12)
+    levels = compute_levels(center=100.0, atr=6.0, params=params)   # step = 30% of center
+    assert len(levels.rungs) >= params.min_rungs
+    assert min(levels.rungs) > 0
+
+
+def test_swing_pivot_on_the_wrong_side_of_center_is_ignored():
+    params = GridParams(min_rungs=2)
+    # Breakout: last confirmed swing high (95) now sits BELOW center.
+    levels = compute_levels(center=100.0, atr=2.0, params=params, swing_high=95.0)
+    assert levels.rungs[-1] > 100.0

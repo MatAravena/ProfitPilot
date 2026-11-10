@@ -50,15 +50,21 @@ class AccumulateNoStopPolicy:
     def __init__(self, params: GridParams) -> None:
         self.params = params
         self._extensions_used = 0
+        self._active_mult: Optional[float] = None
 
     def prepare(self, bars: List, plan_series: Optional[GridPlanSeries]) -> None:
         self._extensions_used = 0
+        self._active_mult = None
 
     def should_force_close(self, i: int, bar, plan: GridPlan, ledger) -> bool:
         return False
 
     def extend_range_mult(self, i: int, bar, plan: GridPlan, ledger) -> Optional[float]:
-        if plan.levels is None or self._extensions_used >= self.params.max_extensions:
+        """`bar` must be the bar the plan was built from (i-1), never the bar about to fill --
+        deciding on a close and then filling that same bar's low/high is look-ahead. One budget
+        slot buys one break episode: the wider ladder holds while price stays outside the range
+        and is released once it comes back in."""
+        if plan.levels is None:
             return None
         rungs = plan.levels.rungs
         broke_low = (
@@ -66,7 +72,10 @@ class AccumulateNoStopPolicy:
             and bar.close < rungs[0]
         )
         broke_high = plan.direction == GridDirection.SHORT_BIASED and bar.close > rungs[-1]
-        if broke_low or broke_high:
+        if not (broke_low or broke_high):
+            self._active_mult = None
+            return None
+        if self._active_mult is None and self._extensions_used < self.params.max_extensions:
             self._extensions_used += 1
-            return self.params.range_atr_mult * (1 + self._extensions_used)
-        return None
+            self._active_mult = self.params.range_atr_mult * (1 + self._extensions_used)
+        return self._active_mult
