@@ -5,7 +5,7 @@ from typing import List, Optional
 
 import structlog
 
-from app.core.constants import MIN_BACKTEST_BARS
+from app.core.constants import MIN_BACKTEST_BARS, STRATEGY_LOOKBACK_BARS
 from app.core.datetime_utils import to_naive_utc
 from app.core.enums import Timeframe
 from app.core.types import OHLCV, RiskConfig
@@ -102,6 +102,8 @@ class BacktestService:
             take_profit_pct=req.take_profit_pct,
             position_size_pct=size_pct,
             slippage_pct=req.slippage_pct,
+            # Same history window the live executor fetches — parity, and a linear-time run.
+            lookback_bars=STRATEGY_LOOKBACK_BARS,
         )
         return await engine.run()
 

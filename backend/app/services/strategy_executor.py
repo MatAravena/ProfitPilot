@@ -8,6 +8,7 @@ from typing import Awaitable, Callable, List, Optional, Tuple
 import structlog
 
 from app.core.config import get_settings
+from app.core.constants import STRATEGY_LOOKBACK_BARS
 from app.services.alerts import send_alert
 from app.core.enums import BrokerID, MarketType, Timeframe
 from app.core.types import MarketData, RiskConfig
@@ -347,7 +348,8 @@ class StrategyExecutor:
         if class_name not in StrategyRegistry.list_all():
             load_user_strategies()
 
-        bars = await fetch_ohlcv(symbol=symbol, timeframe=timeframe, limit=200)
+        # Same window a backtest shows the strategy (STRATEGY_LOOKBACK_BARS) — parity.
+        bars = await fetch_ohlcv(symbol=symbol, timeframe=timeframe, limit=STRATEGY_LOOKBACK_BARS)
         if not bars:
             logger.warning("executor.no_data", symbol=symbol)
             return True

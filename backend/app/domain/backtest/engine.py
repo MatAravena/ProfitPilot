@@ -57,6 +57,7 @@ class BacktestEngine:
         position_size_pct: float = 1.0,   # fraction of equity per entry; 1.0 = all-in
         slippage_pct: float = 0.0,        # adverse fill slippage per side (spread + impact)
         allow_short: bool = True,         # include shorts the strategy asks for (matches live gate)
+        lookback_bars: Optional[int] = None,  # bars the strategy sees per decision; None = all
     ):
         self._strategy = strategy
         self._bars = bars
@@ -68,6 +69,9 @@ class BacktestEngine:
         self._position_size_pct = position_size_pct
         self._slippage_pct = slippage_pct
         self._allow_short = allow_short
+        if lookback_bars is not None and lookback_bars < 2:
+            raise ValueError("lookback_bars must be >= 2")
+        self._lookback = lookback_bars
 
     async def run(self) -> BacktestResult:
         bars = self._bars
@@ -100,11 +104,13 @@ class BacktestEngine:
                     trades.append(trade)
                     position = None
 
-            # Build MarketData up to (and including) current bar
+            # Build MarketData up to (and including) the current bar — only the last
+            # `lookback` bars when set, which is exactly what the live executor fetches.
+            start = 0 if self._lookback is None else max(0, i + 1 - self._lookback)
             market_data = MarketData(
                 symbol=current.symbol,
                 timeframe=current.timeframe,
-                bars=bars[: i + 1],
+                bars=bars[start: i + 1],
             )
 
             # Generate signals from strategy

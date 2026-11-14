@@ -34,7 +34,13 @@ from app.models.schemas.grid_schemas import (
 from app.services.accumulation_compare_service import AccumulationCompareService
 from app.services.backtest_service import BacktestService
 from app.services.grid_service import GridService
+from app.models.schemas.walk_forward_schemas import (
+    WalkForwardFoldResponse,
+    WalkForwardRequest,
+    WalkForwardResponse,
+)
 from app.services.monte_carlo_service import MonteCarloService
+from app.services.walk_forward_service import WalkForwardService
 
 router = APIRouter(prefix="/backtests", tags=["backtests"])
 
@@ -44,6 +50,7 @@ _svc = BacktestService()
 _mc_svc = MonteCarloService(_svc)
 _dca_svc = AccumulationCompareService(_svc)
 _grid_svc = GridService(_svc)
+_wf_svc = WalkForwardService(_svc)
 
 
 @router.get("/strategies", response_model=AvailableStrategiesResponse)
@@ -138,6 +145,49 @@ async def run_montecarlo(req: MonteCarloRequest):
         drawdown_threshold_pct=mc.drawdown_threshold_pct,
         # Domain dataclass field names match the response schema → build straight from asdict.
         methods={name: MonteCarloMethodResponse(**asdict(m)) for name, m in mc.methods.items()},
+    )
+
+
+@router.post("/walk-forward", response_model=WalkForwardResponse)
+async def run_walk_forward(req: WalkForwardRequest):
+    """Optimize `param_grid` on each training window, trade the winner on the next unseen
+    window, and report only those out-of-sample results — the honest version of a
+    parameter sweep. Bad input / not enough data for one fold → 400."""
+    try:
+        run = await _wf_svc.run(req)
+    except ValueError as exc:
+        raise AppError(str(exc), code=ErrorCode.BAD_REQUEST) from exc
+    except AppError:
+        raise
+    except Exception as exc:
+        logger.error("walk_forward.failed", strategy=req.strategy_name, symbol=req.symbol,
+                     timeframe=req.timeframe, error=str(exc), exc_info=exc)
+        raise BacktestError(f"Walk-forward failed: {exc}") from exc
+
+    r, ts = run.result, run.bar_timestamps_ms
+    return WalkForwardResponse(
+        strategy_name=run.strategy_name, symbol=run.symbol, timeframe=run.timeframe,
+        objective=r.objective, initial_capital=r.initial_capital,
+        train_bars=run.train_bars, test_bars=run.test_bars,
+        combinations=r.combinations, skipped_combinations=run.skipped_combinations,
+        oos_total_return_pct=r.oos_total_return_pct, oos_max_drawdown_pct=r.oos_max_drawdown_pct,
+        oos_sharpe=r.oos_sharpe, buy_hold_total_return_pct=r.buy_hold_total_return_pct,
+        buy_hold_max_drawdown_pct=r.buy_hold_max_drawdown_pct,
+        pct_folds_profitable=r.pct_folds_profitable, avg_is_score=r.avg_is_score,
+        avg_oos_sharpe=r.avg_oos_sharpe, distinct_param_sets=r.distinct_param_sets,
+        folds=[
+            WalkForwardFoldResponse(
+                train_start=ts[f.train_start], train_end=ts[f.train_end - 1],
+                test_start=ts[f.test_start], test_end=ts[f.test_end - 1],
+                params=f.params, is_score=f.is_score, is_return_pct=f.is_return_pct,
+                oos_return_pct=f.oos_return_pct, oos_sharpe=f.oos_sharpe,
+                oos_max_drawdown_pct=f.oos_max_drawdown_pct, oos_trades=f.oos_trades,
+                buy_hold_return_pct=f.buy_hold_return_pct,
+            )
+            for f in r.folds
+        ],
+        equity_curve=[EquityPointResponse(timestamp=p.timestamp, value=p.value) for p in r.equity_curve],
+        buy_hold_curve=[EquityPointResponse(timestamp=p.timestamp, value=p.value) for p in r.buy_hold_curve],
     )
 
 

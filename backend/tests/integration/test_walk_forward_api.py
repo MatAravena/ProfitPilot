@@ -1,0 +1,70 @@
+"""POST /api/v1/backtests/walk-forward — through the real route, service, engine."""
+from __future__ import annotations
+
+import math
+from unittest.mock import AsyncMock, patch
+
+import pytest
+
+import app.domain.strategy.examples.sma_crossover  # noqa: F401 — registers built-ins
+from tests.conftest import make_bars
+
+URL = "/api/v1/backtests/walk-forward"
+
+
+def _bars(n=900):
+    return make_bars([30_000 + 1_500 * math.sin(i / 9) + 800 * math.sin(i / 37) + i * 3 for i in range(n)])
+
+
+def _body(**overrides):
+    body = {
+        "strategy_name": "SmaCrossover", "symbol": "BTCUSDT", "timeframe": "1d",
+        "param_grid": {"fast_period": [5, 10, 60], "slow_period": [30, 50]},
+        "train_days": 300, "test_days": 100,
+    }
+    body.update(overrides)
+    return body
+
+
+async def _post(client, body, bars=None):
+    with patch("app.services.backtest_service.fetch_ohlcv",
+               new=AsyncMock(return_value=bars if bars is not None else _bars())):
+        return await client.post(URL, json=body)
+
+
+@pytest.mark.asyncio
+async def test_walk_forward_returns_out_of_sample_folds(client):
+    resp = await _post(client, _body())
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+
+    # 900 daily bars, 300 train + 100 test, stepping by 100 → 6 folds.
+    assert len(body["folds"]) == 6
+    assert body["train_bars"] == 300 and body["test_bars"] == 100
+    # fast=60 is >= both slow values → rejected by the strategy itself, not fatal.
+    assert body["combinations"] == 4 and body["skipped_combinations"] == 2
+    folds = body["folds"]
+    assert all(a["test_end"] < b["test_start"] for a, b in zip(folds, folds[1:]))
+    assert all(f["train_end"] < f["test_start"] for f in folds)
+    assert all(f["params"]["fast_period"] in (5, 10) for f in folds)
+    assert body["equity_curve"] and body["buy_hold_curve"]
+    assert "out-of-sample" in body["caveat"]
+
+
+@pytest.mark.asyncio
+async def test_too_little_data_for_one_fold_is_a_400(client):
+    resp = await _post(client, _body(train_days=800, test_days=200))
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_param_both_fixed_and_searched_is_a_400(client):
+    resp = await _post(client, _body(parameters={"fast_period": 5}))
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_oversized_grid_is_rejected_before_running(client):
+    grid = {"fast_period": list(range(2, 22)), "slow_period": list(range(30, 50))}   # 400 combos
+    resp = await _post(client, _body(param_grid=grid))
+    assert resp.status_code == 422

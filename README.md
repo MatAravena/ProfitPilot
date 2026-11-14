@@ -105,6 +105,28 @@ is reconciled on the next poll rather than captured immediately. The one remaini
 backtest↔live difference is fill *timing* (backtest fills next-bar open, live fills at the just-closed
 bar) — negligible for 24/7 crypto, and the honest choice for daily bars.
 
+### Walk-forward — does the edge survive data it wasn't tuned on?
+
+A parameter sweep over all history picks the winner with hindsight: the settings are chosen
+on the same data that scores them. `POST /api/v1/backtests/walk-forward` removes that. It
+splits history into folds — optimize `param_grid` on a training window (default 730 days),
+trade the winner on the next unseen window (default 180 days), step forward, repeat — and
+reports only the unseen windows, next to buy-and-hold over the same windows.
+
+Every run goes through the ordinary backtest engine, with the same costs, sizing, stops and
+history window as `/run` and as live. The test run sees prior bars for indicator warm-up but
+only trades inside its own window; a causality test guarantees future bars can't influence an
+earlier fold's choice. Read it as: **out-of-sample beats buy-and-hold on return-to-drawdown, in
+most folds** = evidence; in-sample great + out-of-sample flat = overfit.
+
+First results (2026-11-14, real cached data, 100% position size so the signal is comparable to
+buy-and-hold): MACD on BTC daily survived (same return as buy-and-hold with a 59% vs 86% max
+drawdown); MACD on ETH daily, SMA on BTC daily and MACD on BTC 4h did not. Details in `TODO.md`.
+
+The backtest engine shows a strategy only its last `STRATEGY_LOOKBACK_BARS` (500) bars per
+decision — the same window the live executor fetches — which keeps runs linear in bar count
+(a 14k-bar 4h backtest went from ~22 s to ~1.6 s with identical trades).
+
 ### Monte Carlo — is the result edge or luck?
 
 A single backtest is one path through history — one *ordering* of one *sample* of trades. From the
