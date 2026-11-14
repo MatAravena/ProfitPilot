@@ -11,7 +11,7 @@ from app.domain.backtest.accumulation import bars_per_day
 from app.domain.backtest.engine import BacktestEngine
 from app.domain.backtest.walk_forward import WalkForwardResult, expand_grid, walk_forward
 from app.domain.strategy.base import StrategyRegistry
-from app.domain.strategy.loader import load_user_strategies
+from app.domain.strategy.loader import load_builtin_strategies, load_user_strategies
 from app.models.schemas.walk_forward_schemas import WalkForwardRequest
 from app.services.backtest_service import BacktestService, _TIMEFRAME_MAP
 
@@ -40,6 +40,7 @@ class WalkForwardService:
         self._backtests = backtest_service or BacktestService()
 
     async def run(self, req: WalkForwardRequest) -> WalkForwardRun:
+        load_builtin_strategies()
         load_user_strategies()
         timeframe = _TIMEFRAME_MAP.get(req.timeframe)
         if timeframe is None:

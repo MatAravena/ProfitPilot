@@ -338,13 +338,13 @@ class StrategyExecutor:
         """Run one poll cycle. Returns False if the strategy should stop (halted)."""
         from app.domain.backtest.data_provider import fetch_ohlcv
         from app.domain.strategy.base import StrategyRegistry
-        from app.domain.strategy.loader import load_user_strategies
+        from app.domain.strategy.loader import load_builtin_strategies, load_user_strategies
         from app.api.ws.manager import manager
 
         # Ensure strategy classes are registered — built-ins always, user_strategies/*.py
         # only when the requested class isn't registered yet (avoids a filesystem glob on
         # every poll cycle).
-        importlib.import_module("app.domain.strategy.examples.sma_crossover")
+        load_builtin_strategies()
         if class_name not in StrategyRegistry.list_all():
             load_user_strategies()
 

@@ -17,7 +17,7 @@ Algorithmic trading platform with ML forecasting, multi-broker execution, and an
 ## What Works Today
 
 - **Backtesting** — run any registered strategy against Yahoo Finance / Bybit historical data, see equity curve, trade markers, and full performance metrics (Sharpe, max drawdown, win rate, profit factor). Positions are sized with the **same risk model as live trading** (`position_size_pct`, default 2%), so a backtest's equity curve reflects the magnitude the strategy would actually trade live — not an all-in curve that overstates returns. Fills carry realistic costs: flat **commission** plus **adverse slippage** (`slippage_pct`, default 5 bps — buys fill higher, sells lower), so results aren't optimistically frictionless
-- **Strategy system** — built-in SMA crossover, RSI mean reversion, MACD, Bollinger Bands; user-defined strategies auto-loaded from `backend/user_strategies/`
+- **Strategy system** — built-in SMA crossover, RSI mean reversion, MACD, Bollinger Bands, Donchian breakout, trend filter (price vs moving average), RSI pullback in an uptrend; user-defined strategies auto-loaded from `backend/user_strategies/`
 - **Strategy Builder (sandbox)** — Monaco code editor + subprocess sandbox backtest, all in the browser. Write a strategy by hand and backtest it immediately, no Claude involved. _The "generate from plain English via Claude" button is deferred — see Phase 3 below; user-facing Claude usage isn't part of the roadmap until well past the current SaaS phase_
 - **Live/paper trade pipeline** — one executor loop per active strategy runs the full chain: `signal → position sizing → RiskManager veto → broker → fill → persistence`. Paper trading uses a built-in `SimulatedBrokerAdapter` with a durable virtual ledger (zero broker setup) that charges the **same commission + slippage as the backtest**, and shares the backtest's exact intent→action logic (open / close / full reversal); live uses a real broker connection. Signals and every order attempt are persisted; orders broadcast over WebSocket. The full paper lifecycle is covered by an **end-to-end test** (see How It Works below)
 - **Risk profile + per-strategy overrides** — a per-user risk profile (SL/TP, drawdown limits, max positions, order rate, kill switch) sets the defaults, edited in Settings; each strategy carries behavioral config (position size, `allow_short`, poll) plus **optional risk overrides** (blank = inherit the profile). Editing a strategy's config restarts only that bot (live-adapts); changing the profile only refreshes form defaults, never running bots. Backtests take arrangeable SL/TP **and position size %** per run (position size defaults to the live 2%, so backtest ≈ live)
@@ -121,7 +121,11 @@ most folds** = evidence; in-sample great + out-of-sample flat = overfit.
 
 First results (2026-11-14, real cached data, 100% position size so the signal is comparable to
 buy-and-hold): MACD on BTC daily survived (same return as buy-and-hold with a 59% vs 86% max
-drawdown); MACD on ETH daily, SMA on BTC daily and MACD on BTC 4h did not. Details in `TODO.md`.
+drawdown); MACD on ETH daily, SMA on BTC daily and MACD on BTC 4h did not. Of all seven
+built-ins, two survive, both only on BTC daily: MACD, and the trend filter (hold above a
+50–150-day average, cash below) — the latter with every period in that range working, which
+is what a real effect looks like. RSI, Bollinger, Donchian and RSI-pullback fail. Details in
+`TODO.md`.
 
 The backtest engine shows a strategy only its last `STRATEGY_LOOKBACK_BARS` (500) bars per
 decision — the same window the live executor fetches — which keeps runs linear in bar count

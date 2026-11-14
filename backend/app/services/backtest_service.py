@@ -12,7 +12,9 @@ from app.core.types import OHLCV, RiskConfig
 from app.domain.backtest.data_provider import fetch_ohlcv
 from app.domain.backtest.engine import BacktestEngine, BacktestResult
 from app.domain.strategy.base import StrategyRegistry
-from app.domain.strategy.loader import get_all_strategy_classes, load_user_strategies
+from app.domain.strategy.loader import (
+    get_all_strategy_classes, load_builtin_strategies, load_user_strategies,
+)
 from app.models.db.ohlcv_bar import OhlcvBar
 from app.models.schemas.backtest_schemas import AvailableStrategiesResponse, BacktestRequest
 from app.repositories.ohlcv_repository import OhlcvRepository
@@ -63,6 +65,7 @@ def _cache_covers(rows: List[OhlcvBar], start, end) -> bool:
 
 class BacktestService:
     async def run(self, req: BacktestRequest) -> BacktestResult:
+        load_builtin_strategies()
         load_user_strategies()
 
         timeframe = _TIMEFRAME_MAP.get(req.timeframe)

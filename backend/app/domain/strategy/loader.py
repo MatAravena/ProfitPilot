@@ -56,7 +56,52 @@ _BUILTIN_META: dict[str, dict[str, Any]] = {
              "description": "How many standard deviations the bands sit from the middle average. Higher = wider bands, fewer signals."},
         ],
     },
+    "DonchianBreakout": {
+        "display_name": "Donchian Breakout",
+        "description": "Trend following — buy a breakout to a new N-bar high, exit on a new M-bar low (long only)",
+        "parameters": [
+            {"key": "entry_bars", "type": "int", "default": 55, "label": "Entry Channel",
+             "description": "Bars in the breakout channel. Close above the highest high of these bars → enter long."},
+            {"key": "exit_bars", "type": "int", "default": 20, "label": "Exit Channel",
+             "description": "Bars in the exit channel. Close below the lowest low of these bars → exit. Shorter = exits sooner."},
+        ],
+    },
+    "TrendFilter": {
+        "display_name": "Trend Filter",
+        "description": "Hold while price is above its long moving average, stay in cash below it (long only)",
+        "parameters": [
+            {"key": "period", "type": "int", "default": 200, "label": "Average Period",
+             "description": "Bars in the moving average. Longer = fewer whipsaws, slower to react."},
+        ],
+    },
+    "RsiPullbackInTrend": {
+        "display_name": "RSI Pullback in Uptrend",
+        "description": "Buy short, sharp dips only while the long-term trend is up; exit on the bounce (long only)",
+        "parameters": [
+            {"key": "rsi_period", "type": "int", "default": 2, "label": "RSI Period",
+             "description": "Bars for the RSI that measures the dip. 2–3 = very short-term pullbacks."},
+            {"key": "entry_rsi", "type": "float", "default": 10, "label": "Entry RSI",
+             "description": "Buy when RSI falls below this. Lower = deeper dips, fewer trades."},
+            {"key": "trend_period", "type": "int", "default": 200, "label": "Trend Average",
+             "description": "Only buy while price is above this moving average (the uptrend filter)."},
+            {"key": "exit_period", "type": "int", "default": 5, "label": "Exit Average",
+             "description": "Exit when price closes back above this short moving average."},
+        ],
+    },
 }
+
+# Every module holding built-in strategies. Importing one registers its classes; this tuple
+# is the single list — add a new built-in module here and nowhere else.
+_BUILTIN_MODULES = (
+    "app.domain.strategy.examples.sma_crossover",
+    "app.domain.strategy.examples.trend",
+)
+
+
+def load_builtin_strategies() -> None:
+    for module in _BUILTIN_MODULES:
+        importlib.import_module(module)
+
 
 # user_strategies/ lives at backend/user_strategies/ (four levels up from this file)
 _USER_STRATEGIES_DIR = Path(__file__).parents[3] / "user_strategies"
@@ -100,7 +145,7 @@ def get_all_strategy_classes() -> list[dict[str, Any]]:
         parameters   list[{key, type, default, label}]
     """
     # Ensure built-ins and user files are loaded
-    importlib.import_module("app.domain.strategy.examples.sma_crossover")
+    load_builtin_strategies()
     load_user_strategies()
 
     from app.domain.strategy.base import StrategyRegistry
