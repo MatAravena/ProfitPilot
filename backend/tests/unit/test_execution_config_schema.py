@@ -33,7 +33,8 @@ def test_from_instance_does_not_revalidate_persisted_values():
     from types import SimpleNamespace
 
     legacy = SimpleNamespace(
-        size_pct=0.0, stop_loss_pct=0.0, take_profit_pct=0.0, max_open_positions=0,
+        size_pct=0.0, risk_per_trade_pct=None, stop_loss_pct=0.0, take_profit_pct=0.0,
+        max_open_positions=0,
         max_daily_drawdown_pct=0.0, max_total_drawdown_pct=0.0, max_orders_per_minute=0,
         allow_short=True, kill_switch_enabled=True, poll_seconds=None,
     )

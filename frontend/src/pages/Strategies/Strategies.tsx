@@ -259,8 +259,15 @@ function StrategyCard({ strategy, brokers, onStatusChange, onDelete, onEditConfi
       {strategy.execution && (
         <div className="flex flex-wrap gap-1.5 text-[10px]">
           <span className="bg-surface-2 border border-border px-1.5 py-0.5 rounded">
-            {t('strategies.config.sizeShort')} <span className="font-mono text-text">{pct(strategy.execution.size_pct)}</span>
+            {t(strategy.execution.risk_per_trade_pct != null ? 'strategies.config.maxSizeShort' : 'strategies.config.sizeShort')}{' '}
+            <span className="font-mono text-text">{pct(strategy.execution.size_pct)}</span>
           </span>
+          {strategy.execution.risk_per_trade_pct != null && (
+            <span className="bg-surface-2 border border-border px-1.5 py-0.5 rounded">
+              {t('strategies.config.riskShort')}{' '}
+              <span className="font-mono text-text">{pct(strategy.execution.risk_per_trade_pct)}</span>
+            </span>
+          )}
           <span className="bg-surface-2 border border-border px-1.5 py-0.5 rounded">
             {t('strategies.config.slShort')}{' '}
             <span className="font-mono text-danger">

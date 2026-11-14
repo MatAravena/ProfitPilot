@@ -32,6 +32,19 @@ describe('ExecutionConfigForm', () => {
     expect(size.value).toBe('2')      // restored from the model (0.02) — no silent divergence
   })
 
+  it('risk per trade is off by default and relabels size as the maximum when set', () => {
+    render(<Harness />)
+    expect(screen.getByText('Position size')).toBeTruthy()
+    const risk = screen.getByPlaceholderText('Off') as HTMLInputElement
+    expect(risk.value).toBe('')
+
+    fireEvent.change(risk, { target: { value: '0.5' } })
+    expect(screen.getByText('Max position size')).toBeTruthy()   // size is now the cap
+
+    fireEvent.change(risk, { target: { value: '' } })
+    expect(screen.getByText('Position size')).toBeTruthy()       // cleared → fixed sizing again
+  })
+
   it('risk override fields start blank (inherit) and stay cleared', () => {
     render(<Harness />)
     // All risk overrides default to null → blank inputs with the "Inherit" placeholder.

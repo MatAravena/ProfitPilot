@@ -101,6 +101,7 @@ class BacktestService:
             stop_loss_pct=req.stop_loss_pct,
             take_profit_pct=req.take_profit_pct,
             position_size_pct=size_pct,
+            risk_per_trade_pct=req.risk_per_trade_pct,
             slippage_pct=req.slippage_pct,
             # Same history window the live executor fetches — parity, and a linear-time run.
             lookback_bars=STRATEGY_LOOKBACK_BARS,

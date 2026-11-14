@@ -6,6 +6,7 @@ import type { ExecutionConfig } from '@/types'
 // Behavioral defaults are concrete; risk fields default to null ⇒ inherit the user's risk profile.
 export const DEFAULT_EXECUTION_CONFIG: ExecutionConfig = {
   size_pct: 0.02,
+  risk_per_trade_pct: null,
   allow_short: true,
   poll_seconds: null,
   stop_loss_pct: null,
@@ -125,13 +126,21 @@ export function ExecutionConfigForm({ value, onChange }: Props) {
     <div className="space-y-3">
       {/* Behavioral — always per-strategy. */}
       <div className="grid grid-cols-2 gap-2">
-        <PctField label={t('strategies.config.positionSize')} value={value.size_pct}
+        {/* In risk mode the size field becomes the cap — say so instead of silently changing meaning. */}
+        <PctField
+          label={t(value.risk_per_trade_pct != null ? 'strategies.config.maxPositionSize' : 'strategies.config.positionSize')}
+          value={value.size_pct}
           onChange={(v) => onChange({ size_pct: v ?? 0 })} />
+        <PctField label={`${t('strategies.config.riskPerTrade')} ${t('strategies.config.optional')}`}
+          value={value.risk_per_trade_pct} optional
+          placeholder={t('strategies.config.off')}
+          onChange={(v) => onChange({ risk_per_trade_pct: v })} />
         <IntField label={`${t('strategies.config.pollSeconds')} ${t('strategies.config.optional')}`}
           value={value.poll_seconds} optional
           placeholder={t('strategies.config.auto')}
           onChange={(v) => onChange({ poll_seconds: v })} />
       </div>
+      <p className="text-[10px] text-text-muted">{t('strategies.config.riskPerTradeHint')}</p>
       <Switch label={t('strategies.config.allowShort')} checked={value.allow_short}
         onChange={(v) => onChange({ allow_short: v })} />
 

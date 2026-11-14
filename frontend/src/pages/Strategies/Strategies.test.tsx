@@ -12,7 +12,7 @@ const sampleStrategy = {
   id: 's1', class_name: 'SmaCrossover', label: 'My SMA', symbol: 'BTCUSDT',
   timeframe: '1d', broker_connection_id: null, status: 'draft', parameters: {},
   execution: {
-    size_pct: 0.02, stop_loss_pct: 0.015, take_profit_pct: null,
+    size_pct: 0.02, risk_per_trade_pct: null, stop_loss_pct: 0.015, take_profit_pct: null,
     max_open_positions: 5, max_daily_drawdown_pct: 0.03, max_total_drawdown_pct: 0.1,
     max_orders_per_minute: 10, allow_short: true, kill_switch_enabled: true, poll_seconds: null,
   },

@@ -8,12 +8,21 @@ from __future__ import annotations
 
 import sqlalchemy as sa
 
-from app.db.base import Base
-from app.db.migrate import BASELINE_REVISION, schema_drift, upgrade_to_head
+from alembic import command
+
+from app.db.migrate import BASELINE_REVISION, _config, schema_drift, upgrade_to_head
 
 
 def _engine(tmp_path):
     return sa.create_engine(f"sqlite:///{(tmp_path / 'm.db').as_posix()}")
+
+
+def _make_legacy_database(conn):
+    """What create_all produced before Alembic: the BASELINE schema with no alembic_version
+    table. (Not create_all of today's models — those include columns added by later
+    migrations, which a genuinely old database does not have.)"""
+    command.upgrade(_config(conn), BASELINE_REVISION)
+    conn.execute(sa.text("drop table alembic_version"))
 
 
 def _revision(conn):
@@ -43,7 +52,7 @@ def test_existing_create_all_database_is_adopted_without_data_loss(tmp_path):
     alembic_version. They are stamped at the baseline, then upgraded — never recreated."""
     engine = _engine(tmp_path)
     with engine.begin() as conn:
-        Base.metadata.create_all(conn)
+        _make_legacy_database(conn)
         conn.execute(sa.text(
             "insert into users (id, email, username, hashed_password, is_active) "
             "values ('00000000000000000000000000000001', 'a@b.c', 'u', '', 1)"
@@ -62,7 +71,7 @@ def test_adopted_database_missing_an_index_is_repaired(tmp_path):
     """The real dev DB lost ix_strategy_instances_user_id in a July table rebuild."""
     engine = _engine(tmp_path)
     with engine.begin() as conn:
-        Base.metadata.create_all(conn)
+        _make_legacy_database(conn)
         conn.execute(sa.text("drop index ix_strategy_instances_user_id"))
 
     with engine.begin() as conn:

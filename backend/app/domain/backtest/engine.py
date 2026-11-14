@@ -7,6 +7,7 @@ import structlog
 from app.core.constants import DEFAULT_WARMUP_BARS
 from app.core.enums import Timeframe
 from app.core.types import MarketData, OHLCV
+from app.domain.execution.position_sizer import entry_fraction
 from app.domain.execution.reconcile import CLOSE, OPEN_LONG, OPEN_SHORT, plan_actions
 from app.domain.backtest.metrics import (
     BacktestMetrics, EquityPoint, PricePoint, TradeRecord, compute_metrics,
@@ -58,6 +59,7 @@ class BacktestEngine:
         slippage_pct: float = 0.0,        # adverse fill slippage per side (spread + impact)
         allow_short: bool = True,         # include shorts the strategy asks for (matches live gate)
         lookback_bars: Optional[int] = None,  # bars the strategy sees per decision; None = all
+        risk_per_trade_pct: Optional[float] = None,  # risk mode; position_size_pct is then the cap
     ):
         self._strategy = strategy
         self._bars = bars
@@ -72,6 +74,9 @@ class BacktestEngine:
         if lookback_bars is not None and lookback_bars < 2:
             raise ValueError("lookback_bars must be >= 2")
         self._lookback = lookback_bars
+        # Same rule as live (position_sizer.entry_fraction). Computed once: inputs are fixed
+        # for the run, and it raises here — not mid-run — on risk sizing without a stop.
+        self._entry_fraction = entry_fraction(position_size_pct, risk_per_trade_pct, stop_loss_pct)
 
     async def run(self) -> BacktestResult:
         bars = self._bars
@@ -202,7 +207,7 @@ class BacktestEngine:
         is_long = side == "long"
         entry = self._apply_slippage(fill_price, is_buy=is_long)   # buy slips up, sell slips down
         commission = entry * self._commission_pct
-        notional = capital * self._position_size_pct
+        notional = capital * self._entry_fraction
         size = notional / (entry + commission)
         position = _Position(side=side, entry_price=entry, size=size, entry_time=ts_ms)
         if is_long:

@@ -353,6 +353,22 @@ export function Backtests() {
             <span className="text-[10px] text-text-muted">{t('backtests.positionSizeHint')}</span>
           </div>
 
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs text-text-muted font-medium">{t('backtests.riskPerTrade')}</label>
+            <input
+              type="text" inputMode="decimal"
+              value={form.risk_per_trade_pct != null ? String(+(form.risk_per_trade_pct * 100).toFixed(4)) : ''}
+              placeholder={t('backtests.riskPerTradeOff')}
+              onChange={(e) => {
+                const raw = e.target.value
+                const n = raw === '' || Number.isNaN(Number(raw)) ? null : Number(raw) / 100
+                setForm((f) => ({ ...f, risk_per_trade_pct: n }))
+              }}
+              className="bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+            <span className="text-[10px] text-text-muted">{t('backtests.riskPerTradeHint')}</span>
+          </div>
+
           {params.length > 0 && (
             <div className="flex flex-col gap-1.5">
               <label className="text-xs text-text-muted font-medium">{t('backtests.parameters')}</label>

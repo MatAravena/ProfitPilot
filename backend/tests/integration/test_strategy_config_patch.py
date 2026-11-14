@@ -54,3 +54,35 @@ async def test_patch_config_can_clear_a_risk_override(client):
     resp = await client.patch(f"/api/v1/strategies/{sid}/config", json={"stop_loss_pct": None})
     assert resp.status_code == 200, resp.text
     assert resp.json()["execution"]["stop_loss_pct"] is None
+
+
+async def test_risk_per_trade_is_saved_and_reaches_the_live_risk_config(client):
+    """Risk-mode sizing is a per-strategy setting: saved via the API, carried into the
+    RiskConfig the executor sizes with, and cleared back to fixed sizing with null."""
+    await _create_tables()
+    created = await _create_strategy(client, {"size_pct": 1.0, "stop_loss_pct": 0.10})
+    sid = created["id"]
+    assert created["execution"]["risk_per_trade_pct"] is None
+
+    resp = await client.patch(f"/api/v1/strategies/{sid}/config", json={"risk_per_trade_pct": 0.005})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["execution"]["risk_per_trade_pct"] == 0.005
+
+    from uuid import UUID
+    from app.db.base import AsyncSessionLocal
+    from app.models.db.strategy_instance import StrategyInstance
+    from app.services.strategy_executor import StrategyExecutor
+    async with AsyncSessionLocal() as session:
+        inst = await session.get(StrategyInstance, UUID(sid))
+        cfg = await StrategyExecutor()._build_risk_cfg(session, inst)
+    assert cfg.risk_per_trade_pct == 0.005 and cfg.max_position_size_pct == 1.0
+
+    resp = await client.patch(f"/api/v1/strategies/{sid}/config", json={"risk_per_trade_pct": None})
+    assert resp.json()["execution"]["risk_per_trade_pct"] is None
+
+
+async def test_risk_per_trade_above_ten_percent_is_rejected(client):
+    await _create_tables()
+    sid = (await _create_strategy(client, {}))["id"]
+    resp = await client.patch(f"/api/v1/strategies/{sid}/config", json={"risk_per_trade_pct": 0.5})
+    assert resp.status_code == 422

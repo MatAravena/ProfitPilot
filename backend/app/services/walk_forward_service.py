@@ -86,7 +86,8 @@ class WalkForwardService:
             initial_capital=req.initial_capital, lookback_bars=STRATEGY_LOOKBACK_BARS,
             bars_per_year=BacktestEngine._infer_bars_per_year(timeframe),  # noqa: SLF001
             commission_pct=req.commission_pct, slippage_pct=req.slippage_pct,
-            position_size_pct=size_pct, stop_loss_pct=req.stop_loss_pct,
+            position_size_pct=size_pct, risk_per_trade_pct=req.risk_per_trade_pct,
+            stop_loss_pct=req.stop_loss_pct,
             take_profit_pct=req.take_profit_pct,
         )
         for fold in result.folds:   # report real parameter names, not the combo index

@@ -22,6 +22,9 @@ class BacktestRequest(BaseModel):
     # backtest curve reflects live magnitude. None → the service applies the live default (2%).
     # Pre-filled from the user's risk profile on the form (like SL/TP).
     position_size_pct: Optional[float] = Field(None, gt=0, le=1)
+    # Risk mode (same rule as live): size = risk / stop distance, capped at position_size_pct.
+    # Needs stop_loss_pct. None = fixed position_size_pct.
+    risk_per_trade_pct: Optional[float] = Field(None, gt=0, le=0.1)
     # Optional risk exits for the run — arrangeable per backtest (pre-filled from the user's
     # risk profile on the form). None = no stop / no target.
     stop_loss_pct: Optional[float] = Field(None, gt=0, le=1)

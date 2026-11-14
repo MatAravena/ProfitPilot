@@ -133,7 +133,8 @@ export interface RiskProfile {
 // Per-strategy config (mirrors backend ExecutionConfig). Behavioral fields are always set;
 // risk fields are optional overrides — null ⇒ inherit the user's RiskProfile.
 export interface ExecutionConfig {
-  size_pct: number
+  size_pct: number                    // position size — or the MAX position size in risk mode
+  risk_per_trade_pct: number | null   // risk mode: equity lost at the stop; null = fixed size
   allow_short: boolean
   poll_seconds: number | null
   stop_loss_pct: number | null

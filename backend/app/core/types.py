@@ -179,7 +179,10 @@ class Account(BaseModel):
 # ── Risk ───────────────────────────────────────────────────────────────────────
 
 class RiskConfig(BaseModel):
+    # Position size (fixed mode) — or the MAXIMUM position size when risk_per_trade_pct is set.
     max_position_size_pct: float = 0.02
+    # Risk mode: equity lost if the stop is hit. None = fixed mode. See position_sizer.entry_fraction.
+    risk_per_trade_pct: Optional[float] = None
     max_open_positions: int = 5
     max_daily_drawdown_pct: float = 0.03
     max_total_drawdown_pct: float = 0.10

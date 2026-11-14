@@ -17,7 +17,12 @@ class ExecutionConfig(BaseModel):
 
     # Behavioral — always per-strategy.
     size_pct: float = Field(default=_s.DEFAULT_MAX_POSITION_SIZE_PCT, gt=0, le=1,
-                            description="Position size as a fraction of account equity")
+                            description="Position size as a fraction of equity — or the MAXIMUM "
+                                        "position size when risk_per_trade_pct is set")
+    risk_per_trade_pct: Optional[float] = Field(
+        default=None, gt=0, le=0.1,
+        description="Risk mode: fraction of equity lost if the stop is hit; size = risk / stop. "
+                    "None = fixed size_pct.")
     allow_short: bool = True
     poll_seconds: Optional[int] = Field(default=None, ge=5,
                                         description="Override poll cadence; None derives it from the timeframe")

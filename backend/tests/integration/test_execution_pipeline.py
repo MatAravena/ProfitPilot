@@ -364,9 +364,10 @@ def _fake_instance(strat_id, user_id, **overrides):
     base = dict(
         id=strat_id, class_name="X", symbol=SYMBOL, timeframe="1d", parameters={},
         user_id=user_id, status="paper", broker_connection_id=None,
-        size_pct=0.02, stop_loss_pct=0.015, take_profit_pct=None, max_open_positions=5,
-        max_daily_drawdown_pct=0.03, max_total_drawdown_pct=0.1, max_orders_per_minute=10,
-        allow_short=True, kill_switch_enabled=True, poll_seconds=None, peak_equity=None,
+        size_pct=0.02, risk_per_trade_pct=None, stop_loss_pct=0.015, take_profit_pct=None,
+        max_open_positions=5, max_daily_drawdown_pct=0.03, max_total_drawdown_pct=0.1,
+        max_orders_per_minute=10, allow_short=True, kill_switch_enabled=True, poll_seconds=None,
+        peak_equity=None,
     )
     base.update(overrides)
     return SimpleNamespace(**base)
@@ -412,7 +413,8 @@ def test_merge_risk_config_inherits_unset_overrides():
         max_orders_per_minute=20, kill_switch_enabled=False,
     )
     inst = SimpleNamespace(
-        size_pct=0.03, stop_loss_pct=None, take_profit_pct=None, max_open_positions=4,
+        size_pct=0.03, risk_per_trade_pct=None, stop_loss_pct=None, take_profit_pct=None,
+        max_open_positions=4,
         max_daily_drawdown_pct=None, max_total_drawdown_pct=None,
         max_orders_per_minute=None, kill_switch_enabled=None,
     )

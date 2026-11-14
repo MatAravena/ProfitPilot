@@ -596,6 +596,7 @@ def _merge_risk_config(profile, instance) -> RiskConfig:
 
     return RiskConfig(
         max_position_size_pct=instance.size_pct,
+        risk_per_trade_pct=instance.risk_per_trade_pct,   # per-strategy only, like size
         stop_loss_pct=pick(instance.stop_loss_pct, profile.stop_loss_pct),
         take_profit_pct=pick(instance.take_profit_pct, profile.take_profit_pct),
         max_open_positions=pick(instance.max_open_positions, profile.max_open_positions),

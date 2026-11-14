@@ -12,6 +12,7 @@ export interface BacktestRequest {
   stop_loss_pct?: number | null
   take_profit_pct?: number | null
   position_size_pct?: number | null   // fraction of equity per entry (same model as live); null → backend 2% default
+  risk_per_trade_pct?: number | null  // risk mode: size = risk / stop, capped at position_size_pct; needs a stop
   parameters: Record<string, unknown>
 }
 

@@ -569,6 +569,20 @@ third is written against them.
 
 Max position 2% · Max 5 open positions · Daily drawdown limit 3% · Total drawdown limit 10% · Mandatory stop-loss 1.5% · Max 10 orders/min. Enforced by `RiskManager`. These are the global defaults (via `.env`); **each strategy instance can override them** through its own execution/risk config (editable in the Strategies page and applied live).
 
+**Two sizing modes, one rule** (`position_sizer.entry_fraction`, used by live *and* the backtest engine):
+
+- **Fixed** (default): every entry is *Position size %* of equity.
+- **Risk per trade** (optional, per strategy and per backtest): you choose how much equity a
+  losing trade may cost — the loss if the stop is hit — and the size follows:
+  `position = risk per trade ÷ stop distance`, capped at *Position size %*, which then acts as
+  the **maximum**. 1% risk with a 10% stop → a 10% position.
+
+Fixed 2% with a 1.5% stop risks 0.03% of equity per trade — that is why backtests at the
+defaults show tiny returns *and* tiny drawdowns. Sizing never creates an edge (Sharpe stays the
+same); it chooses how much return you take for how much drawdown. Pick the stop for the
+strategy's timeframe first: a 1.5% stop on daily BTC is hit by ordinary daily noise — on MACD
+BTC 1d it cut the out-of-sample Sharpe from 1.29 to 0.77 (see `TODO.md`).
+
 ---
 
 ## Project Structure

@@ -28,6 +28,7 @@ class StrategyInstance(Base):
 
     # ── Behavioral config (always per-strategy) ──
     size_pct: Mapped[float] = mapped_column(Float, nullable=False, default=0.02)
+    risk_per_trade_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # None → fixed size
     allow_short: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     poll_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # None → derive from timeframe
 
