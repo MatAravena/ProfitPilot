@@ -707,9 +707,30 @@ API, safe while running) and keeps the newest `BACKUP_KEEP` (default 14). By def
 a Docker volume on the same disk; set `PROFITPILOT_BACKUP_DIR` to a folder on another disk or a
 cloud-synced folder (writable by uid 1000) so a dead disk doesn't take the backups with it.
 
-**Schema changes.** Tables are still created with `create_all`, which never alters an existing
-table. Until Alembic is wired, a deploy that changes an ORM model will not update the box's
-database — see `TODO.md`.
+**Schema changes.** The app runs Alembic migrations on every startup, so a deploy that
+changes an ORM model updates the box's database in place. A database created before
+migrations existed is adopted automatically (stamped at the baseline, data untouched). See
+*Database migrations* below for how to add one.
+
+---
+
+## Database migrations
+
+The schema is owned by Alembic (`backend/migrations/`). On startup the app upgrades the
+database to the latest revision (`app/db/migrate.py`); it never uses `create_all` on a real
+database. When you change an ORM model in `app/models/db/`:
+
+```bash
+cd backend
+alembic revision --autogenerate -m "add foo to strategy_instances"
+# READ the generated file in migrations/versions/ — autogenerate misses renames and
+# data moves, and SQLite changes run in batch mode (the table is copied)
+pytest tests/unit/test_migrations.py   # fails if any model change has no migration
+```
+
+Commit the migration together with the model change. Tests build their in-memory
+databases with `create_all` for speed; `test_migrations.py` is what proves the migrations
+produce the same schema.
 
 ---
 

@@ -19,11 +19,11 @@ async def lifespan(app: FastAPI):
     """Startup and shutdown events."""
     logger.info("profitpilot.starting", version=settings.APP_VERSION)
 
-    # Create all DB tables (dev convenience — use Alembic migrations in production)
-    from app.db.base import engine, Base, AsyncSessionLocal
-    import app.models.db  # noqa: F401 — registers all ORM models with Base
+    # Bring the schema to the latest Alembic revision (adopts pre-Alembic databases).
+    from app.db.base import engine, AsyncSessionLocal
+    from app.db.migrate import upgrade_to_head
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(upgrade_to_head)
 
     # Seed the single local user (Phase 1 — no auth needed)
     await _seed_local_user(AsyncSessionLocal)
