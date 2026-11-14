@@ -1,0 +1,33 @@
+# Phase 1 — local dev without Docker or ML stack
+# Unpinned for Python 3.14 compatibility (latest wheels)
+
+# API
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+
+# Database — SQLite for local dev (switch to asyncpg + PostgreSQL for production)
+sqlalchemy[asyncio]
+aiosqlite
+
+# Brokers
+alpaca-py
+pybit
+python-binance
+
+# Encryption
+cryptography
+
+# Logging + HTTP
+structlog
+httpx
+
+# Market data (free multi-asset: crypto, stocks, forex, ETFs)
+yfinance
+
+# Testing
+pytest
+pytest-asyncio
+pytest-cov
+httpx

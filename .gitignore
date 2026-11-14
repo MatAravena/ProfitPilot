@@ -63,10 +63,8 @@ PROFITPILOT_PROJECT_INSTRUCTIONS.md
 .superpowers/**
 **/profitpilot.db
 Architecture notes.txt
-TODO.md
 docs/*
 graphify-out/*
-CLAUDE.md
 scratchpad/*
 
 # Dependency manifests are source, not notes — the *.txt rule above hid them from a fresh clone.
