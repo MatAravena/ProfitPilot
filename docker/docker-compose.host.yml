@@ -1,0 +1,36 @@
+# Always-on host (the old PC): one container, SQLite on a named volume, auto-restart.
+#
+#   docker compose -f docker/docker-compose.host.yml up -d --build
+#
+# Host-side knobs (shell env or GitHub Actions variables):
+#   PROFITPILOT_ENV_FILE    absolute path to the box's .env (secrets stay on the box)
+#   PROFITPILOT_BIND        interface to publish on. Default 127.0.0.1 (loopback only).
+#                           There is NO auth in Phase 1 — never use 0.0.0.0 on a network
+#                           you don't control; use your Tailscale IP for remote access.
+#   PROFITPILOT_BACKUP_DIR  host folder for nightly DB backups (ideally another disk).
+#                           Must be writable by uid 1000. Default: a named volume.
+
+name: profitpilot
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: ${PROFITPILOT_ENV_FILE:-../backend/.env}
+    environment:
+      # These win over the env file: the container layout is not the box's business.
+      DATABASE_URL: sqlite+aiosqlite:////data/profitpilot.db
+      FRONTEND_DIST_DIR: /app/frontend_dist
+      BACKUP_DIR: /backups
+      DEBUG: "false"
+    ports:
+      - "${PROFITPILOT_BIND:-127.0.0.1}:8000:8000"
+    volumes:
+      - data:/data
+      - ${PROFITPILOT_BACKUP_DIR:-backups}:/backups
+
+volumes:
+  data:
+  backups:

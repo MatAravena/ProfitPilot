@@ -68,3 +68,6 @@ docs/*
 graphify-out/*
 CLAUDE.md
 scratchpad/*
+
+# Dependency manifests are source, not notes — the *.txt rule above hid them from a fresh clone.
+!backend/requirements*.txt

@@ -3,11 +3,12 @@ import asyncio
 import importlib
 import uuid
 from datetime import datetime, timezone
-from typing import List, Optional, Tuple
+from typing import Awaitable, Callable, List, Optional, Tuple
 
 import structlog
 
 from app.core.config import get_settings
+from app.services.alerts import send_alert
 from app.core.enums import BrokerID, MarketType, Timeframe
 from app.core.types import MarketData, RiskConfig
 from app.domain.broker.base import BrokerAdapter
@@ -42,6 +43,16 @@ _SILENT_NOOP_REASONS = {"no signal", "flat, no action", "already in position"}
 
 _MAX_CONSECUTIVE_ERRORS = 5
 
+# Slack on top of two poll intervals before a strategy is reported stale (slow data fetches).
+_STALE_GRACE_SECONDS = 300
+
+
+def _brief(detail: object, limit: int = 200) -> str:
+    """First line of an error, truncated — what is safe and useful to push to a phone.
+    Full text stays in the local log: DB errors carry SQL + parameters, SDK errors carry payloads."""
+    lines = str(detail).strip().splitlines()
+    return lines[0][:limit] if lines else ""
+
 
 class StrategyExecutor:
     """
@@ -51,13 +62,70 @@ class StrategyExecutor:
     (sizing → risk gate → broker), persists orders + signals, and broadcasts.
     """
 
-    def __init__(self):
+    def __init__(self, notify: Optional[Callable[[str], Awaitable[None]]] = None):
         self._tasks: dict[str, asyncio.Task] = {}
         self._risk = RiskManager()
         self._engine = ExecutionEngine(self._risk)
         # Last processed bar timestamp per strategy — drives new-bar gating so signals
         # are generated once per closed bar, not on every poll.
         self._last_bar_ts: dict[str, object] = {}
+        # Operator alerting (injected; defaults to Telegram, a no-op unless configured).
+        self._notify_fn = notify or send_alert
+        self._erroring: set[str] = set()                    # strategies already alerted as failing
+        self._meta: dict[str, tuple[str, int]] = {}         # sid → (label, poll seconds)
+        self._progress: dict[str, datetime] = {}            # sid → last completed cycle
+
+    # ── Health / alerting ────────────────────────────────────────────────────────
+
+    def _track(self, sid: str, label: str, poll_secs: int, now: datetime) -> None:
+        self._meta[sid] = (label, poll_secs)
+        self._progress[sid] = now
+
+    def _untrack(self, sid: str) -> None:
+        self._meta.pop(sid, None)
+        self._progress.pop(sid, None)
+        self._erroring.discard(sid)
+
+    def health(self, now: datetime) -> list[dict]:
+        """One row per running strategy. `stale` = no completed cycle (with market data)
+        for more than two poll intervals — the silent-failure case alerts exist for."""
+        rows = []
+        for sid, (label, poll_secs) in self._meta.items():
+            last = self._progress.get(sid)
+            stale = last is None or (now - last).total_seconds() > 2 * poll_secs + _STALE_GRACE_SECONDS
+            rows.append({"strategy_id": sid, "label": label, "last_progress": last, "stale": stale})
+        return rows
+
+    async def _notify(self, text: str) -> None:
+        try:
+            await self._notify_fn(text)
+        except Exception as exc:   # an alert channel failure must never stop trading
+            logger.warning("executor.notify_failed", error=type(exc).__name__)
+
+    async def _alert_cycle(
+        self, sid: str, label: str, outcomes, keep_going: bool, *, healthy: bool = True,
+    ) -> None:
+        """Alert on halt, and on the FIRST failing cycle (not every poll); re-arm on recovery."""
+        errors = [o.reason for o in outcomes if o.action == ACTION_ERROR]
+        if not keep_going:
+            reasons = [o.reason for o in outcomes if o.halted and o.reason] + errors
+            # Take the strategy off the books BEFORE the (slow, network) alert: the DB already
+            # says "halted", and a re-activate arriving meanwhile must find no running task.
+            self._tasks.pop(sid, None)
+            self._last_bar_ts.pop(sid, None)
+            self._untrack(sid)
+            await self._notify(
+                f"HALTED: {label} — {'; '.join(_brief(r) for r in reasons) or 'kill switch'}"
+            )
+        elif errors:
+            await self._alert_error_once(sid, label, errors[0])
+        elif healthy:
+            self._erroring.discard(sid)
+
+    async def _alert_error_once(self, sid: str, label: str, detail: str) -> None:
+        if sid not in self._erroring:
+            self._erroring.add(sid)
+            await self._notify(f"ERROR: {label} — {_brief(detail)}")
 
     # ── Lifecycle ────────────────────────────────────────────────────────────────
 
@@ -162,6 +230,10 @@ class StrategyExecutor:
             self._launch(instance, risk_cfg, session_factory)
             logger.info("executor.config_reloaded", strategy_id=sid)
 
+    def notify_deleted(self, strategy_id) -> None:
+        """Called when a strategy instance is deleted — its loop must not outlive its row."""
+        self._stop(str(strategy_id))
+
     def shutdown(self) -> None:
         for task in self._tasks.values():
             task.cancel()
@@ -181,6 +253,11 @@ class StrategyExecutor:
             name=f"strategy_{sid}",
         )
         self._tasks[sid] = task
+        self._track(
+            sid, f"{instance.class_name} {instance.symbol} {instance.timeframe}",
+            instance.poll_seconds or _POLL_SECONDS.get(instance.timeframe, 3600),
+            datetime.now(timezone.utc),
+        )
         logger.info("executor.started", strategy_id=sid, class_name=instance.class_name,
                     symbol=instance.symbol, timeframe=instance.timeframe, status=instance.status)
 
@@ -190,6 +267,7 @@ class StrategyExecutor:
         # the current bar with the new config instead of waiting for the next bar close — and
         # so the dict doesn't leak entries for stopped strategies.
         self._last_bar_ts.pop(strategy_id, None)
+        self._untrack(strategy_id)
         if task:
             task.cancel()
             logger.info("executor.stopped", strategy_id=strategy_id)
@@ -226,11 +304,16 @@ class StrategyExecutor:
                     logger.warning("executor.halted", strategy_id=str(strategy_id))
                     self._tasks.pop(str(strategy_id), None)
                     self._last_bar_ts.pop(str(strategy_id), None)
+                    self._untrack(str(strategy_id))
                     break
             except asyncio.CancelledError:
                 break
             except Exception as exc:
                 logger.error("executor.loop_error", strategy_id=str(strategy_id), error=str(exc))
+                await self._alert_error_once(
+                    str(strategy_id), f"{class_name} {symbol} {timeframe_str}",
+                    f"{type(exc).__name__}: {exc}",
+                )
 
             try:
                 await asyncio.sleep(poll_secs)
@@ -289,6 +372,8 @@ class StrategyExecutor:
         sid = str(strategy_id)
         bar_ts = bars[-1].timestamp
         signals = []
+        label = self._meta.get(sid, (f"{class_name} {symbol} {timeframe.value}", 0))[0]
+        generated_ok = True
         if self._last_bar_ts.get(sid) != bar_ts:
             try:
                 signals = await strategy.generate_signals(market_data)
@@ -296,6 +381,10 @@ class StrategyExecutor:
             except Exception as exc:
                 logger.error("executor.generate_failed", strategy_id=sid, error=str(exc))
                 # Leave signals empty and retry generation next poll; still run exits below.
+                # A strategy that cannot produce signals is NOT healthy, even though the
+                # cycle completes: alert, and don't let it count as progress.
+                generated_ok = False
+                await self._alert_error_once(sid, label, f"{type(exc).__name__}: {exc}")
 
         async with session_factory() as session:
             self._persist_signals(session, strategy_id, user_id, symbol, timeframe, signals, latest_close, now)
@@ -309,6 +398,10 @@ class StrategyExecutor:
             await session.commit()
 
         await self._broadcast(manager, strategy_id, symbol, signals, outcomes, latest_close, now)
+        # A cycle that saw market data, could generate signals, and committed is "progress".
+        if generated_ok:
+            self._progress[sid] = datetime.now(timezone.utc)
+        await self._alert_cycle(sid, label, outcomes, keep_going, healthy=generated_ok)
         return keep_going
 
     # ── Trade execution ──────────────────────────────────────────────────────────

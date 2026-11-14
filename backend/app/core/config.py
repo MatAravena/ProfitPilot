@@ -73,6 +73,15 @@ class Settings(BaseSettings):
     # JWT
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24h
 
+    # Hosting / operations (all optional — empty = feature off, which is the dev default)
+    FRONTEND_DIST_DIR: str = ""        # serve the built frontend from the API (single-container host)
+    TELEGRAM_BOT_TOKEN: str = ""       # operator alerts; both token and chat id required
+    TELEGRAM_CHAT_ID: str = ""
+    # Bounded: an out-of-range hour would silently mean "never" — no heartbeat, no backup.
+    HEARTBEAT_HOUR_UTC: int = Field(7, ge=0, le=23)   # daily "still alive" message + DB backup
+    BACKUP_DIR: str = ""               # nightly SQLite backup target
+    BACKUP_KEEP: int = Field(14, ge=1)  # number of backups retained
+
 
 @lru_cache
 def get_settings() -> Settings:

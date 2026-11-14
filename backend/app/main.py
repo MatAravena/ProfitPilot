@@ -35,13 +35,31 @@ async def lifespan(app: FastAPI):
     snapshot_task = asyncio.create_task(
         portfolio_snapshot_loop(AsyncSessionLocal, LOCAL_USER_ID)
     )
+    monitor_task = asyncio.create_task(_build_monitor(executor).run())
 
     yield
 
     executor.shutdown()
     snapshot_task.cancel()
+    monitor_task.cancel()
     logger.info("profitpilot.stopping")
     await engine.dispose()
+
+
+def _build_monitor(executor):
+    """Wire the operational monitor: executor health → Telegram, plus the daily DB backup."""
+    from app.db.backup import backup_sqlite, latest_backup_date
+    from app.services.alerts import send_alert
+    from app.services.monitor import Monitor
+
+    def backup():
+        if not settings.BACKUP_DIR:
+            return None
+        return backup_sqlite(settings.DATABASE_URL, settings.BACKUP_DIR, settings.BACKUP_KEEP)
+
+    done = latest_backup_date(settings.DATABASE_URL, settings.BACKUP_DIR) if settings.BACKUP_DIR else None
+    return Monitor(executor, send_alert, backup=backup,
+                   heartbeat_hour_utc=settings.HEARTBEAT_HOUR_UTC, last_heartbeat=done)
 
 
 async def _seed_local_user(session_factory) -> None:
@@ -107,6 +125,10 @@ def create_app() -> FastAPI:
     # WebSocket — added directly on app to avoid router prefix issues
     from app.api.ws.router import websocket_endpoint
     app.add_api_websocket_route("/ws", websocket_endpoint)
+
+    # Built frontend (single-container hosting) — answers only what no route matched.
+    from app.api.spa import mount_spa
+    mount_spa(app, settings.FRONTEND_DIST_DIR)
 
     return app
 

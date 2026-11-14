@@ -640,7 +640,7 @@ cargo build --release        # generates PyO3 Python bindings
 Copy `backend/.env.example` and fill in:
 
 ```env
-DATABASE_URL=sqlite:///./profitpilot.db
+DATABASE_URL=sqlite+aiosqlite:///./profitpilot.db
 ANTHROPIC_API_KEY=...        # Builder "generate" button only — deferred to Phase 3, not needed yet
 #ANTHROPIC_MODEL=...         # optional — pin/upgrade the model. Defaults in config.py.
                              # Leave commented: an empty value overrides the default with "".
@@ -652,6 +652,64 @@ ALPACA_SECRET_KEY=...
 BINANCE_API_KEY=...
 BINANCE_SECRET_KEY=...
 ```
+
+### Run it always-on (a spare PC / home server)
+
+Paper and testnet strategies only produce a track record while the app is running, so they
+need a machine that stays on. The host setup is **one container**: the API serves the built
+frontend on a single port, SQLite lives on a Docker volume, and the container restarts itself
+after a crash or reboot. No Postgres, Redis, or Celery is needed for this.
+
+**On the box, once:**
+
+1. Install Docker (Docker Engine on Linux, or Docker Desktop on Windows). Turn off sleep, set
+   the BIOS to power on after a power loss, and keep the clock synced (NTP).
+2. Create the env file somewhere outside any git checkout, e.g. `/opt/profitpilot/.env`, from
+   `backend/.env.example`. Set a real `SECRET_KEY`; add `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`
+   for alerts. `DATABASE_URL`, `BACKUP_DIR`, `FRONTEND_DIST_DIR` and `DEBUG` are set by the compose
+   file — whatever the env file says for those is ignored.
+3. Start it:
+   ```bash
+   PROFITPILOT_ENV_FILE=/opt/profitpilot/.env \
+     docker compose -f docker/docker-compose.host.yml up -d --build
+   ```
+   Open `http://127.0.0.1:8000` on the box.
+
+**Remote access.** There is **no authentication in Phase 1**, so the port is published on
+loopback only. To reach it from another machine, install [Tailscale](https://tailscale.com) on
+both and set `PROFITPILOT_BIND` to the box's Tailscale IP. Never publish it on `0.0.0.0` on a
+network you don't control, and never port-forward it from your router.
+
+**Deploy on push.** `.github/workflows/deploy.yml` runs the backend and frontend tests on
+GitHub's runners, then rebuilds and restarts the container on the box:
+
+1. On the box, add a [self-hosted runner](https://docs.github.com/actions/hosting-your-own-runners)
+   for this repository with the extra label `profitpilot`, installed as a service.
+2. In the repo's *Settings → Secrets and variables → Actions → Variables*, set
+   `PROFITPILOT_ENV_FILE` (required), and optionally `PROFITPILOT_BIND` and
+   `PROFITPILOT_BACKUP_DIR`.
+3. Push to `main` (or run the workflow manually).
+
+> **Keep the repository private.** The deploy job runs on the machine that holds your broker
+> keys. The workflow has no `pull_request` trigger on purpose — don't add one.
+
+**What the box tells you (Telegram).** Alerts are plain code, no LLM:
+
+| Message | Meaning |
+|---|---|
+| `ERROR: <strategy> — …` | A cycle failed (broker/network). Sent on the first failure only, re-armed after a clean cycle. |
+| `HALTED: <strategy> — …` | Kill switch tripped, or 5 consecutive errors. The strategy has stopped. |
+| `STALE: <strategy> …` | No completed cycle with market data for over two poll intervals. |
+| `Daily: N strategies running, M stale. backup: …` | Once a day at `HEARTBEAT_HOUR_UTC`. **Not receiving it means the box is down.** |
+
+**Backups.** The daily heartbeat also writes a consistent SQLite backup (SQLite's own backup
+API, safe while running) and keeps the newest `BACKUP_KEEP` (default 14). By default they go to
+a Docker volume on the same disk; set `PROFITPILOT_BACKUP_DIR` to a folder on another disk or a
+cloud-synced folder (writable by uid 1000) so a dead disk doesn't take the backups with it.
+
+**Schema changes.** Tables are still created with `create_all`, which never alters an existing
+table. Until Alembic is wired, a deploy that changes an ORM model will not update the box's
+database — see `TODO.md`.
 
 ---
 

@@ -127,5 +127,6 @@ async def delete_strategy(
     try:
         await svc.delete(strategy_id, LOCAL_USER_ID)
         await db.commit()
+        executor.notify_deleted(strategy_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="Strategy not found")
