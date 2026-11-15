@@ -108,7 +108,8 @@ bar) — negligible for 24/7 crypto, and the honest choice for daily bars.
 ### Walk-forward — does the edge survive data it wasn't tuned on?
 
 A parameter sweep over all history picks the winner with hindsight: the settings are chosen
-on the same data that scores them. `POST /api/v1/backtests/walk-forward` removes that. It
+on the same data that scores them. Walk-forward removes that — on the Backtests page, run a
+backtest, then **Run walk-forward** (or call `POST /api/v1/backtests/walk-forward`). It
 splits history into folds — optimize `param_grid` on a training window (default 730 days),
 trade the winner on the next unseen window (default 180 days), step forward, repeat — and
 reports only the unseen windows, next to buy-and-hold over the same windows.

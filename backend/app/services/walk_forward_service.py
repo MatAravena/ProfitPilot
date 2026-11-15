@@ -7,7 +7,6 @@ import structlog
 
 from app.core.constants import STRATEGY_LOOKBACK_BARS
 from app.core.types import RiskConfig
-from app.domain.backtest.accumulation import bars_per_day
 from app.domain.backtest.engine import BacktestEngine
 from app.domain.backtest.walk_forward import WalkForwardResult, expand_grid, walk_forward
 from app.domain.strategy.base import StrategyRegistry
@@ -72,7 +71,7 @@ class WalkForwardService:
             raise ValueError("No parameter combination in param_grid is valid for this strategy")
 
         bars = await self._backtests._get_bars(req, timeframe)  # noqa: SLF001 — intentional reuse
-        per_day = bars_per_day(bars)
+        per_day = _bars_per_calendar_day(bars)
         train_bars = max(2, round(req.train_days * per_day))
         test_bars = max(1, round(req.test_days * per_day))
 
@@ -104,3 +103,14 @@ class WalkForwardService:
             bar_timestamps_ms=[int(b.timestamp.timestamp() * 1000) for b in bars],
             result=result,
         )
+
+
+def _bars_per_calendar_day(bars) -> float:
+    """Average bars per CALENDAR day over the whole history. The windows are requested in
+    calendar days; markets closed at weekends (stocks/ETFs: ~252 bars a year) have fewer
+    bars per day than 24/7 crypto. A median-gap estimate would say 1.0 for both, turning
+    "730 days" into ~2.9 years of stock data."""
+    if len(bars) < 2:
+        return 1.0
+    span_days = (bars[-1].timestamp - bars[0].timestamp).total_seconds() / 86400
+    return (len(bars) - 1) / span_days if span_days > 0 else 1.0

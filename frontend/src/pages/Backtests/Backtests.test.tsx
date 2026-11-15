@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { setupServer } from 'msw/node'
+import { http, HttpResponse } from 'msw'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 
@@ -113,6 +114,39 @@ describe('Backtests page', () => {
       expect(screen.getAllByText('Guarded re-anchor (bounded)').length).toBeGreaterThan(0)
       expect(screen.getAllByText('Accumulate, no stop (unbounded)').length).toBeGreaterThan(0)
       expect(screen.getByText(/omit perp funding-rate cost/i)).toBeInTheDocument()
+    })
+  })
+
+  it('runs a walk-forward around the backtested parameters and shows the verdict', async () => {
+    let sent: Record<string, unknown> | null = null
+    server.use(
+      http.post('/api/v1/backtests/walk-forward', async ({ request }) => {
+        sent = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json({
+          strategy_name: 'SmaCrossover', symbol: 'BTCUSDT', timeframe: '1d', objective: 'sharpe_ratio',
+          initial_capital: 10000, train_bars: 730, test_bars: 180, combinations: 9, skipped_combinations: 0,
+          oos_total_return_pct: 5, oos_max_drawdown_pct: 20, oos_sharpe: 0.2,
+          buy_hold_total_return_pct: 60, buy_hold_max_drawdown_pct: 40, pct_folds_profitable: 40,
+          avg_is_score: 1.4, avg_oos_sharpe: 0.1, distinct_param_sets: 3, folds: [],
+          equity_curve: [], buy_hold_curve: [], caveat: 'Only the out-of-sample columns count.',
+        })
+      }),
+    )
+    const user = userEvent.setup()
+    renderBacktests()
+
+    await waitFor(() => screen.getByRole('option', { name: 'SMA Crossover' }))
+    await user.click(screen.getByRole('button', { name: /Run Backtest/i }))
+    await waitFor(() => screen.getByRole('button', { name: /run walk-forward/i }))
+    await user.click(screen.getByRole('button', { name: /run walk-forward/i }))
+
+    await waitFor(() => expect(screen.getByText(/does not pass/i)).toBeInTheDocument())
+    expect(sent).toMatchObject({
+      strategy_name: 'SmaCrossover',
+      parameters: {},
+      param_grid: { fast_period: [10, 20, 30], slow_period: [25, 50, 75] },
+      train_days: 730,
+      test_days: 180,
     })
   })
 })

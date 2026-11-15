@@ -177,6 +177,54 @@ export interface AvailableStrategiesResponse {
   strategies: StrategyMeta[]
 }
 
+// Mirrors backend walk_forward_schemas.py
+export interface WalkForwardRequest extends BacktestRequest {
+  param_grid: Record<string, number[]>
+  train_days: number
+  test_days: number
+  objective?: 'sharpe_ratio' | 'total_return_pct' | 'profit_factor' | 'win_rate'
+}
+
+export interface WalkForwardFold {
+  train_start: number   // Unix ms
+  train_end: number
+  test_start: number
+  test_end: number
+  params: Record<string, number | string | boolean>
+  is_score: number
+  is_return_pct: number
+  oos_return_pct: number
+  oos_sharpe: number
+  oos_max_drawdown_pct: number
+  oos_trades: number
+  buy_hold_return_pct: number
+}
+
+export interface WalkForwardResponse {
+  strategy_name: string
+  symbol: string
+  timeframe: string
+  objective: string
+  initial_capital: number
+  train_bars: number
+  test_bars: number
+  combinations: number
+  skipped_combinations: number
+  oos_total_return_pct: number
+  oos_max_drawdown_pct: number
+  oos_sharpe: number
+  buy_hold_total_return_pct: number
+  buy_hold_max_drawdown_pct: number
+  pct_folds_profitable: number
+  avg_is_score: number
+  avg_oos_sharpe: number
+  distinct_param_sets: number
+  folds: WalkForwardFold[]
+  equity_curve: EquityPoint[]
+  buy_hold_curve: EquityPoint[]
+  caveat: string
+}
+
 // Mirrors PortfolioSummaryResponse from backend
 export interface AccountSummary {
   broker_id: string

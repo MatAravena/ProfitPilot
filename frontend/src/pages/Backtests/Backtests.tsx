@@ -5,7 +5,9 @@ import { Play, TrendingUp, TrendingDown, Activity, BarChart2, Award, AlertTriang
 import { api } from '@/lib/api'
 import { friendlyError } from '@/lib/errors'
 import { useToastStore } from '@/stores/toast'
-import type { BacktestRequest, BacktestResponse, BacktestMetrics, StrategyMeta, MonteCarloResponse, DcaCompareResponse, GridResponse } from '@/types/backtest'
+import type { BacktestRequest, BacktestResponse, BacktestMetrics, StrategyMeta, MonteCarloResponse, DcaCompareResponse, GridResponse, WalkForwardResponse } from '@/types/backtest'
+import { WalkForwardPanel } from '@/components/backtest/WalkForwardPanel'
+import { buildParamGrid, gridSize } from '@/lib/walkForwardGrid'
 import type { StrategyInstance } from '@/types'
 import { formatCurrency, formatPercent } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
@@ -54,6 +56,9 @@ export function Backtests() {
   // Tunable per-arm params for the DCA comparison, persisted across reloads.
   const [dcaParams, setDcaParams] = useState(loadDcaParams)
   const [gridResult, setGridResult] = useState<GridResponse | null>(null)
+  const [wfResult, setWfResult] = useState<WalkForwardResponse | null>(null)
+  const [wfTrainDays, setWfTrainDays] = useState(730)
+  const [wfTestDays, setWfTestDays] = useState(180)
   // Tunable geometry/regime params for the grid backtest, persisted across reloads.
   const [gridParams, setGridParams] = useState(loadGridParams)
 
@@ -80,6 +85,20 @@ export function Backtests() {
   const montecarlo = useMutation({
     mutationFn: () => api.backtests.montecarlo({ ...(lastReq as BacktestRequest), n_simulations: 5000 }),
     onSuccess: (data) => setMcResult(data),
+    onError: (err) => toastError(err),
+  })
+
+  // Walk-forward — opt-in; the same run as `lastReq`, re-optimized around its parameters on
+  // each past window and judged on the next unseen one.
+  const walkForward = useMutation({
+    mutationFn: () => api.backtests.walkForward({
+      ...(lastReq as BacktestRequest),
+      parameters: {},
+      param_grid: buildParamGrid(lastMeta?.parameters ?? [], lastReq?.parameters ?? {}),
+      train_days: wfTrainDays,
+      test_days: wfTestDays,
+    }),
+    onSuccess: (data) => setWfResult(data),
     onError: (err) => toastError(err),
   })
 
@@ -170,6 +189,7 @@ export function Backtests() {
     setMcResult(null)   // a fresh backtest invalidates the previous MC run
     setDcaResult(null)  // ...and the previous DCA comparison
     setGridResult(null) // ...and the previous grid run
+    setWfResult(null)   // ...and the previous walk-forward
     const req: BacktestRequest = {
       ...form,
       start: startDate ? new Date(startDate).toISOString() : undefined,
@@ -181,6 +201,9 @@ export function Backtests() {
 
   const activeMeta = available?.strategies.find((s) => s.class_name === form.strategy_name)
   const params = activeMeta?.parameters ?? []
+  // Metadata of the strategy that produced `result` (the form may have changed since).
+  const lastMeta = available?.strategies.find((s) => s.class_name === lastReq?.strategy_name)
+  const wfCombos = gridSize(buildParamGrid(lastMeta?.parameters ?? [], lastReq?.parameters ?? {}))
   const m: BacktestMetrics | null = result?.metrics ?? null
   // equity_curve timestamps are Unix ms — convert to seconds for EquityChart
   const equityData = result?.equity_curve.map((p) => ({ time: Math.floor(p.timestamp / 1000), value: p.value })) ?? []
@@ -487,6 +510,40 @@ export function Backtests() {
                   <Dices size={14} />
                   {montecarlo.isPending ? t('backtests.montecarlo.running') : t('backtests.montecarlo.run')}
                 </button>
+              )}
+
+              {/* Walk-forward — opt-in: is this result an edge, or hindsight? */}
+              {wfResult ? (
+                <WalkForwardPanel result={wfResult} />
+              ) : (
+                <Card className="p-4 flex flex-col gap-3">
+                  <p className="text-xs text-text-muted leading-relaxed">
+                    {t('backtests.walkForward.hint', { combos: wfCombos })}
+                  </p>
+                  <div className="flex flex-wrap items-end gap-3">
+                    <label className="flex flex-col gap-1 text-xs text-text-muted">
+                      {t('backtests.walkForward.trainDays')}
+                      <input type="number" min={30} max={3650} value={wfTrainDays}
+                        onChange={(e) => setWfTrainDays(Number(e.target.value) || 730)}
+                        className="w-28 bg-background border border-border rounded-lg px-3 py-2 text-sm text-text" />
+                    </label>
+                    <label className="flex flex-col gap-1 text-xs text-text-muted">
+                      {t('backtests.walkForward.testDays')}
+                      <input type="number" min={7} max={1825} value={wfTestDays}
+                        onChange={(e) => setWfTestDays(Number(e.target.value) || 180)}
+                        className="w-28 bg-background border border-border rounded-lg px-3 py-2 text-sm text-text" />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => walkForward.mutate()}
+                      disabled={walkForward.isPending || !lastReq}
+                      className="flex items-center justify-center gap-2 bg-surface border border-border rounded-lg px-4 py-2.5 text-sm font-medium hover:border-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                    >
+                      <Activity size={14} />
+                      {walkForward.isPending ? t('backtests.walkForward.running') : t('backtests.walkForward.run')}
+                    </button>
+                  </div>
+                </Card>
               )}
 
               {/* DCA vs halving-cycle-grid comparison — opt-in, BTC-focused. Controls stay visible so
