@@ -127,7 +127,7 @@ describe('Backtests page', () => {
           initial_capital: 10000, train_bars: 730, test_bars: 180, combinations: 9, skipped_combinations: 0,
           oos_total_return_pct: 5, oos_max_drawdown_pct: 20, oos_sharpe: 0.2,
           buy_hold_total_return_pct: 60, buy_hold_max_drawdown_pct: 40, pct_folds_profitable: 40,
-          avg_is_score: 1.4, avg_oos_sharpe: 0.1, distinct_param_sets: 3, folds: [],
+          avg_is_score: 1.4, avg_oos_sharpe: 0.1, distinct_param_sets: 3, passes_bar: false, folds: [],
           equity_curve: [], buy_hold_curve: [], caveat: 'Only the out-of-sample columns count.',
         })
       }),

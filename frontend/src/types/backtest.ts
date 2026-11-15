@@ -219,6 +219,7 @@ export interface WalkForwardResponse {
   avg_is_score: number
   avg_oos_sharpe: number
   distinct_param_sets: number
+  passes_bar: boolean   // the project's out-of-sample bar, decided by the backend
   folds: WalkForwardFold[]
   equity_curve: EquityPoint[]
   buy_hold_curve: EquityPoint[]

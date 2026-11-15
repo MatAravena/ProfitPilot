@@ -109,7 +109,10 @@ bar) — negligible for 24/7 crypto, and the honest choice for daily bars.
 
 A parameter sweep over all history picks the winner with hindsight: the settings are chosen
 on the same data that scores them. Walk-forward removes that — on the Backtests page, run a
-backtest, then **Run walk-forward** (or call `POST /api/v1/backtests/walk-forward`). It
+backtest, then **Run walk-forward** (or call `POST /api/v1/backtests/walk-forward`, or from
+`backend/` run `python scripts/research.py walk-forward TrendFilter --symbol BTCUSDT
+--grid '{"period": [50, 100, 150]}'`, which prints JSON with a `passes_bar` verdict — the
+tool AI agents are told to use). It
 splits history into folds — optimize `param_grid` on a training window (default 730 days),
 trade the winner on the next unseen window (default 180 days), step forward, repeat — and
 reports only the unseen windows, next to buy-and-hold over the same windows.
