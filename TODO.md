@@ -137,8 +137,15 @@ is a future discussion.
     sets in 19 folds) but mostly `fast=16`, a plateau rather than one lucky cell.
   - [ ] **Your decision:** pause the two paper strategies that failed (MACD ETHUSDT 1d,
     SMA BTCUSDT 1d). Not done for you — they are your running instances.
-  - [ ] **Not built:** a Backtests-page panel for walk-forward (API only for now — call it from
-    `/api/docs`); a parameter-plateau check (neighbours of the winner also profitable?).
+  - [x] **Backtests-page panel** _(2026-11-15)_ — after any backtest, **Run walk-forward**
+    re-runs that exact request (costs, sizing, stop) searching ½×, 1× and 1.5× each current
+    parameter (`lib/walkForwardGrid.ts`; combos the strategy rejects are skipped server-side),
+    with editable train/test days. `WalkForwardPanel` shows the verdict against the project's
+    bar (`passesBar`: return/DD beats buy & hold, > 50% folds profitable, Sharpe ≥ 0.5), OOS vs
+    B&H stats, a log-scale OOS vs B&H curve, and the fold table. en/es. 11 new frontend tests.
+    A 4h run with a 4-parameter strategy (81 combos) can take a few minutes — no progress bar.
+  - [ ] **Not built:** a parameter-plateau check in the panel (neighbours of the winner also
+    profitable?) — done by hand for TrendFilter in the Step 5b log.
   - [ ] Grid-bot sweep through walk-forward — after the 3 open 2026-11-13 grid findings below.
 - [x] **Backtest engine no longer quadratic** _(2026-11-14)_ — the cost was not indicators but
   the engine handing the strategy the **whole history** every bar. It now passes the last
@@ -367,6 +374,47 @@ buy-and-hold over the same windows · > 50% of folds profitable · OOS Sharpe �
   1.31 / 53% · 10% 1.25 / 74% · 20% 1.24 / 74% · 25% 1.27 / 74%. Unlike MACD (crossover
   *events*), TrendFilter re-signals LONG every bar it is above the average, so a stop-out simply
   re-enters next day. A wide stop keeps more folds profitable and trades less.
+**Gate-1 hypothesis — A2 · ETF trend timing — written BEFORE any ETF backtest. Do not edit.**
+`TrendFilter` (already built) on each of five asset-class ETFs: SPY (US stocks), EFA
+(international stocks), IEF (US 7–10y Treasuries), VNQ (US real estate), DBC (commodities).
+Equal capital per ETF, each its own independent strategy instance, long-only, daily bars.
+*Why it might pay:* it is a drawdown-control rule — asset classes spend long stretches in
+deep bear markets (2008 stocks −55%, 2022 bonds −20%), and being in cash below the average
+skips most of the deepest legs. Five weakly correlated assets smooth each other out — and
+none of them is BTC. *Other side:* buy-and-hold investors who sit through the bear legs.
+*Wrong if:* whipsaws around the average cost as much as the drawdowns avoided (likely in
+choppy assets like DBC), or the cash periods miss the V-shaped recoveries (2020).
+Fixed test: common history of all five (from DBC's 2006 start), walk-forward train 730 /
+test 180 **calendar days**, `period` grid {100, 150, 200} trading days, 5 bps slippage +
+0.1% fee (pessimistic for ETFs), 100% size per instance, no stop.
+**Pass (basket, equal-weight, both required):** out-of-sample max drawdown at most two-thirds
+of equal-weight buy-and-hold's over the same windows, **and** return/max-DD better than it.
+Per-ETF results reported but not required to pass individually.
+
+**A2 result** (Yahoo daily, common history 2006-02 → 2026-11, folds from 2008; 503/124-bar
+windows = 730/180 calendar days):
+
+| | per year | max DD | ret/DD | Sharpe |
+|---|---|---|---|---|
+| **Trend basket** (equal weight) | 3.7% | **15.0%** | 6.56 | 0.50 |
+| Buy-and-hold basket | 7.0% | 43.9% | 5.75 | 0.54 |
+
+Per ETF (OOS vs B&H): SPY +408% / DD 22% vs +742% / 50% (Sharpe 0.80, the best) · EFA +57% /
+30% vs +165% / 58% · IEF +5% / 18% vs +64% / 24% · VNQ **−20%** / 52% vs +254% / 66% · DBC +43%
+/ 50% vs +37% / 74%.
+- **Verdict: passes the pre-registered bar** (DD 15.0% ≤ ⅔ × 43.9%; ret/DD 6.56 > 5.75) — **but
+  only as drawdown control, not as an edge**: it gives up half the return for a third of the
+  drawdown, and Sharpe is no better (0.50 vs 0.54). Honest reading: a calmer way to hold a
+  diversified ETF basket, not a money-maker. Cash earns 0% in the backtest; real cash earns
+  T-bill interest while out of the market, which would lift it somewhat (not modelled).
+- **Still the first non-BTC result** — it diversifies the BTC trend bet. Candidates for paper:
+  the basket on Alpaca paper (5 instances, equal size), or SPY alone (its strongest leg).
+- Found + fixed while doing it: walk-forward windows were converted with a **median bar gap**
+  (1 day for stocks *and* crypto), so "730 days" meant ~2.9 years on stocks. Now bars per
+  **calendar** day over the whole history (`walk_forward_service._bars_per_calendar_day`),
+  with a regression test. Crypto results above are unaffected (it trades every day).
+- Seeded EFA, IEF, VNQ, DBC in `instruments/seed.py` (an unseeded symbol's open is rejected live).
+
 - [ ] **Your decision — gate 5 (paper):** add `TrendFilter` BTCUSDT 1d, period 100–125, in paper,
   stop override ~20%, sized with risk per trade (e.g. 1–2% risk ÷ 20% stop = 5–10% position) or
   a fixed 25–50% max position.
@@ -378,10 +426,19 @@ buy-and-hold over the same windows · > 50% of folds profitable · OOS Sharpe �
 > only gate; agents sit *around* the pipeline, never inside the order path. An agent may only
 > take **risk-reducing** actions (pause a strategy, trip the kill switch) — never open or resize.
 
-- [ ] **Layer 1 — Research agent (dev machine).** The internal MCP server already sketched under
-  Pro Ideas: `run_backtest`, `walk_forward`, `monte_carlo`, `dca_compare`, `list_strategies` as
-  thin wrappers over the existing services. Driven from Claude Code. Returns out-of-sample
-  results by default so it can't fish for in-sample winners. No trading tools at all.
+- [x] **Layer 1 — Research agent (dev machine)** _(2026-11-15)_ — built as a **CLI, not an MCP
+  server**: Claude Code already runs commands, so `backend/scripts/research.py` (`strategies`,
+  `walk-forward`) gives an agent the same capability with no new dependency and no server.
+  Same `WalkForwardService` as the API and the Backtests page, so numbers match the UI. JSON
+  out, `passes_bar` first; **only** out-of-sample results — there is deliberately no command that
+  prints an in-sample best. No trading tools at all. `CLAUDE.md` tells agents to use it.
+  - The pass/fail bar moved to ONE place, `domain/backtest/walk_forward.passes_bar`; the API
+    returns `passes_bar` and the UI panel reads it (was computed in the frontend only).
+  - Verified live: TrendFilter BTC 1d, grid {50,100,150}, data to 2026-11-07 → **passes**
+    (OOS +7,447% / DD 68% / Sharpe 1.14 vs B&H +7,548% / 86%, 65% folds profitable).
+  - Upgrade to MCP only if a non-Claude-Code client needs it (e.g. the box's Layer-2 ops agent).
+  - `scripts/grid_search_strategies.py` (in-sample sweep with `--deploy`) is superseded — your
+    call whether to delete it; `CLAUDE.md` already tells agents not to use it.
 - [ ] **Layer 1b — Paper-to-strategy intake** _(user request 2026-11-13; builds on Layer 1)_.
   Feed a research paper (PDF / arXiv q-fin / SSRN link) to Claude and get a candidate for the
   Step 5b pipeline, not a trade:
