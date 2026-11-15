@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 
-import { WalkForwardPanel, passesBar } from './WalkForwardPanel'
+import { WalkForwardPanel } from './WalkForwardPanel'
 import type { WalkForwardResponse } from '@/types/backtest'
 
 const DAY = 86_400_000
@@ -14,6 +14,7 @@ function fixture(over: Partial<WalkForwardResponse> = {}): WalkForwardResponse {
     oos_total_return_pct: 120, oos_max_drawdown_pct: 30, oos_sharpe: 1.2,
     buy_hold_total_return_pct: 150, buy_hold_max_drawdown_pct: 75,
     pct_folds_profitable: 75, avg_is_score: 1.6, avg_oos_sharpe: 1.1, distinct_param_sets: 2,
+    passes_bar: true,
     folds: [
       { train_start: T0, train_end: T0 + 729 * DAY, test_start: T0 + 730 * DAY, test_end: T0 + 909 * DAY,
         params: { period: 100 }, is_score: 1.7, is_return_pct: 80, oos_return_pct: 25.5,
@@ -30,20 +31,6 @@ function fixture(over: Partial<WalkForwardResponse> = {}): WalkForwardResponse {
   }
 }
 
-describe('passesBar', () => {
-  it('passes when return/drawdown beats buy & hold, most folds win and Sharpe >= 0.5', () => {
-    expect(passesBar(fixture())).toBe(true)   // 120/30 = 4 > 150/75 = 2
-  })
-
-  it.each([
-    ['worse return/drawdown than buy & hold', { oos_total_return_pct: 50 }],
-    ['half or fewer folds profitable', { pct_folds_profitable: 50 }],
-    ['Sharpe below 0.5', { oos_sharpe: 0.49 }],
-  ])('fails on %s', (_, over) => {
-    expect(passesBar(fixture(over))).toBe(false)
-  })
-})
-
 describe('WalkForwardPanel', () => {
   it('shows the verdict, the out-of-sample numbers next to buy & hold, and every fold', () => {
     render(<WalkForwardPanel result={fixture()} />)
@@ -56,7 +43,7 @@ describe('WalkForwardPanel', () => {
   })
 
   it('says so plainly when the strategy does not pass', () => {
-    render(<WalkForwardPanel result={fixture({ oos_sharpe: 0.1 })} />)
+    render(<WalkForwardPanel result={fixture({ passes_bar: false })} />)
     expect(screen.getByText(/does not pass/i)).toBeTruthy()
   })
 })

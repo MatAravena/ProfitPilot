@@ -8,6 +8,7 @@ from fastapi import APIRouter
 
 from app.core.errors import AppError, BacktestError, ErrorCode
 from app.domain.backtest.engine import BacktestResult
+from app.domain.backtest.walk_forward import passes_bar
 from app.models.schemas.backtest_schemas import (
     ArmResultResponse,
     AvailableStrategiesResponse,
@@ -175,6 +176,7 @@ async def run_walk_forward(req: WalkForwardRequest):
         buy_hold_max_drawdown_pct=r.buy_hold_max_drawdown_pct,
         pct_folds_profitable=r.pct_folds_profitable, avg_is_score=r.avg_is_score,
         avg_oos_sharpe=r.avg_oos_sharpe, distinct_param_sets=r.distinct_param_sets,
+        passes_bar=passes_bar(r),
         folds=[
             WalkForwardFoldResponse(
                 train_start=ts[f.train_start], train_end=ts[f.train_end - 1],

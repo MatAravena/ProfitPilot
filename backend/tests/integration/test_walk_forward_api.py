@@ -48,6 +48,7 @@ async def test_walk_forward_returns_out_of_sample_folds(client):
     assert all(f["train_end"] < f["test_start"] for f in folds)
     assert all(f["params"]["fast_period"] in (5, 10) for f in folds)
     assert body["equity_curve"] and body["buy_hold_curve"]
+    assert isinstance(body["passes_bar"], bool)
     assert "out-of-sample" in body["caveat"]
 
 

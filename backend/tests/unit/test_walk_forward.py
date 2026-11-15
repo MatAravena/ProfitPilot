@@ -126,6 +126,24 @@ async def test_aggregate_compounds_the_folds():
     assert res.equity_curve[-1].value == pytest.approx(res.initial_capital * expected, rel=1e-9)
 
 
+async def test_pass_bar_requires_all_three_conditions():
+    from dataclasses import replace
+    from app.domain.backtest.walk_forward import passes_bar
+
+    good = await _wf(_bars(_rising(1000)))
+    # Rising forever: long-and-hold matches buy & hold exactly, so force a clear win/loss.
+    win = replace(good, oos_total_return_pct=100, oos_max_drawdown_pct=10,
+                  buy_hold_total_return_pct=100, buy_hold_max_drawdown_pct=50,
+                  pct_folds_profitable=75, oos_sharpe=1.0)
+    assert passes_bar(win)
+    assert not passes_bar(replace(win, oos_total_return_pct=10))      # worse return/DD than B&H
+    assert not passes_bar(replace(win, pct_folds_profitable=50))      # not MORE than half
+    assert not passes_bar(replace(win, oos_sharpe=0.49))
+    # No drawdown at all: profitable beats any finite ratio; a loss never passes.
+    assert passes_bar(replace(win, oos_max_drawdown_pct=0))
+    assert not passes_bar(replace(win, oos_total_return_pct=-1, oos_max_drawdown_pct=0))
+
+
 async def test_not_enough_data_is_an_error():
     with pytest.raises(ValueError):
         await _wf(_bars(_rising(500)), train_bars=400, test_bars=200)

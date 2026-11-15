@@ -77,6 +77,7 @@ class WalkForwardResponse(BaseModel):
     avg_is_score: float
     avg_oos_sharpe: float
     distinct_param_sets: int
+    passes_bar: bool   # the project's out-of-sample bar (domain walk_forward.passes_bar)
     folds: List[WalkForwardFoldResponse]
     equity_curve: List[EquityPointResponse]
     buy_hold_curve: List[EquityPointResponse]

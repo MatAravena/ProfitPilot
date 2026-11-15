@@ -66,6 +66,24 @@ class WalkForwardResult:
     buy_hold_curve: List[EquityPoint]
 
 
+def passes_bar(r: WalkForwardResult) -> bool:
+    """The project's gate-3 bar (TODO.md 🚦 Step 5b) — the ONE definition; the API returns it,
+    the UI and the research CLI only read it. All three must hold, out-of-sample:
+    return/max-DD better than buy-and-hold over the same windows, more than half the folds
+    profitable, Sharpe >= 0.5."""
+    def ratio(ret: float, dd: float) -> float:
+        if dd > 0:
+            return ret / dd
+        return float("inf") if ret > 0 else float("-inf")
+
+    return (
+        ratio(r.oos_total_return_pct, r.oos_max_drawdown_pct)
+        > ratio(r.buy_hold_total_return_pct, r.buy_hold_max_drawdown_pct)
+        and r.pct_folds_profitable > 50
+        and r.oos_sharpe >= 0.5
+    )
+
+
 def expand_grid(param_grid: Dict[str, Sequence[Any]]) -> List[Dict[str, Any]]:
     if not param_grid or any(len(v) == 0 for v in param_grid.values()):
         raise ValueError("param_grid needs at least one parameter with at least one value")

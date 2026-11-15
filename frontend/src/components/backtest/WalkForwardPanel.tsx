@@ -10,17 +10,6 @@ interface Props {
   result: WalkForwardResponse
 }
 
-/** The project's gate-3 bar (TODO.md 🚦 Step 5b): all three must hold. */
-export function passesBar(r: WalkForwardResponse): boolean {
-  const ratio = (ret: number, dd: number) => (dd > 0 ? ret / dd : ret > 0 ? Infinity : -Infinity)
-  return (
-    ratio(r.oos_total_return_pct, r.oos_max_drawdown_pct) >
-      ratio(r.buy_hold_total_return_pct, r.buy_hold_max_drawdown_pct) &&
-    r.pct_folds_profitable > 50 &&
-    r.oos_sharpe >= 0.5
-  )
-}
-
 function day(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10)
 }
@@ -32,7 +21,7 @@ function chartData(r: WalkForwardResponse) {
 
 export function WalkForwardPanel({ result: r }: Props) {
   const { t } = useTranslation()
-  const pass = passesBar(r)
+  const pass = r.passes_bar   // decided once, by the backend (domain walk_forward.passes_bar)
 
   return (
     <Card className="overflow-hidden">
