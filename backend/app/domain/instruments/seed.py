@@ -63,6 +63,8 @@ _EQUITIES: List[str] = [
     "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AMD", "NFLX", "INTC",
     "JPM", "V", "KO", "DIS", "BA", "COIN", "MSTR",
     "SPY", "QQQ", "VOO", "IWM", "GLD", "TLT",
+    # Asset-class ETFs for the ETF trend-timing basket (TODO 🚦 Step 5b, A2).
+    "EFA", "IEF", "VNQ", "DBC",
 ]
 
 _CRYPTO_MIN_NOTIONAL = 5.0     # Binance's floor; Bybit spot is lower, so this is the safe one

@@ -52,6 +52,29 @@ async def test_walk_forward_returns_out_of_sample_folds(client):
 
 
 @pytest.mark.asyncio
+async def test_windows_are_calendar_days_for_markets_closed_at_weekends(client):
+    """Stocks trade ~252 days a year. 365 calendar days of training must be ~252 bars,
+    not 365 (which would silently be ~1.45 years of stock data)."""
+    from datetime import datetime, timedelta, timezone
+    from app.core.enums import Timeframe
+    from app.core.types import OHLCV
+
+    day, bars = datetime(2020, 1, 1, tzinfo=timezone.utc), []
+    while len(bars) < 1200:
+        if day.weekday() < 5:
+            price = 300 + 20 * math.sin(len(bars) / 11)
+            bars.append(OHLCV(timestamp=day, symbol="SPY", open=price, high=price * 1.01,
+                              low=price * 0.99, close=price, volume=1.0, timeframe=Timeframe.D1))
+        day += timedelta(days=1)
+
+    resp = await _post(client, _body(symbol="SPY", train_days=365, test_days=91), bars=bars)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert 245 <= body["train_bars"] <= 265
+    assert 60 <= body["test_bars"] <= 68
+
+
+@pytest.mark.asyncio
 async def test_too_little_data_for_one_fold_is_a_400(client):
     resp = await _post(client, _body(train_days=800, test_days=200))
     assert resp.status_code == 400
