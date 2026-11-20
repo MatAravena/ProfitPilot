@@ -1,5 +1,5 @@
 from __future__ import annotations
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 import httpx
@@ -58,21 +58,41 @@ async def fetch_ohlcv(
     return []
 
 
+# Safety cap only. 200 × 1000 bars ≈ 22 years of hourly data. The old cap (20 pages) silently
+# cut a 2019→now hourly request to its last ~2.3 years.
+_MAX_BYBIT_PAGES = 200
+
+
+def _utcnow() -> datetime:
+    """Naive UTC now, the convention every bar timestamp here uses (seam for tests)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 async def _fetch_bybit_paginated(
     symbol: str,
     timeframe: Timeframe,
     start: Optional[datetime] = None,
     end: Optional[datetime] = None,
 ) -> List[OHLCV]:
-    """Paginate Bybit's 1000-bar-per-request limit to fetch the full requested range."""
+    """Paginate Bybit's 1000-bar-per-request limit to fetch the full requested range.
+
+    Pages walk BACKWARD from `end`: given an end, Bybit returns the latest ≤1000 bars before it.
+    Given only a start it returns the EARLIEST 1000 bars after start instead — so a missing end
+    is set to now, or paging backward from that first page finds nothing (it used to return
+    just the first 1000 bars of the range)."""
     if start is None:
         # No lower bound — a single page is sufficient
         return await _fetch_bybit_page(symbol, timeframe, limit=1000, start=None, end=end)
 
     all_bars: List[OHLCV] = []
+    if end is None:
+        end = _utcnow()
     current_end = end
 
-    for _ in range(20):  # safety cap: 20 pages × 1000 = 20,000 bars (~55 years of daily data)
+    for page_no in range(_MAX_BYBIT_PAGES):
+        if page_no == _MAX_BYBIT_PAGES - 1:
+            logger.warning("bybit.paginated.cap_reached", symbol=symbol, pages=_MAX_BYBIT_PAGES,
+                           note="older bars in the requested range were not fetched")
         page = await _fetch_bybit_page(symbol, timeframe, limit=1000, start=start, end=current_end)
         if not page:
             break

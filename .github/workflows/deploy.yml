@@ -58,13 +58,27 @@ jobs:
     # A manual run can be started from any branch; only main is ever deployed to the box.
     if: github.ref == 'refs/heads/main'
     runs-on: [self-hosted, profitpilot]
+    # How the box runs the app — repo variable PROFITPILOT_DEPLOY:
+    #   (unset) / "windows" → native Windows install (deploy/windows, no Docker) — the default
+    #   "docker"            → docker/docker-compose.host.yml
     env:
-      PROFITPILOT_ENV_FILE: ${{ vars.PROFITPILOT_ENV_FILE }}
-      PROFITPILOT_BIND: ${{ vars.PROFITPILOT_BIND }}
-      PROFITPILOT_BACKUP_DIR: ${{ vars.PROFITPILOT_BACKUP_DIR }}
+      PROFITPILOT_APP_DIR: ${{ vars.PROFITPILOT_APP_DIR || 'C:\Users\Lenovo\Documents\_WORKKKKK\ProfitPilot' }}  # windows: the clone on the box
+      PROFITPILOT_ENV_FILE: ${{ vars.PROFITPILOT_ENV_FILE }}      # docker only
+      PROFITPILOT_BIND: ${{ vars.PROFITPILOT_BIND }}              # docker only
+      PROFITPILOT_BACKUP_DIR: ${{ vars.PROFITPILOT_BACKUP_DIR }}  # docker only
     steps:
       - uses: actions/checkout@v4
-      - name: Build and restart
+
+      - name: Update the native Windows install
+        if: vars.PROFITPILOT_DEPLOY != 'docker'
+        shell: powershell
+        run: |
+          & .\deploy\windows\update.ps1 -AppDir $env:PROFITPILOT_APP_DIR -Source $env:GITHUB_WORKSPACE
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build and restart (Docker)
+        if: vars.PROFITPILOT_DEPLOY == 'docker'
         run: docker compose -f docker/docker-compose.host.yml up -d --build --wait
-      - name: Remove superseded images (this project's only)
+      - name: Remove superseded images (Docker, this project's only)
+        if: vars.PROFITPILOT_DEPLOY == 'docker'
         run: docker image prune -f --filter label=com.docker.compose.project=profitpilot

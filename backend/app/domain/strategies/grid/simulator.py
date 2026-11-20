@@ -35,6 +35,16 @@ class GridArmResult:
     time_underwater_pct: float
 
 
+def extended_params(grid_params: GridParams, ext_mult: float) -> GridParams:
+    """Ladder settings for an extension to `ext_mult` × ATR. The rung cap scales with the range:
+    with ATR-driven spacing, a fixed max_rungs clamps every wider range back to the same window
+    around center, so later extensions would reach no further than the first. Exposure stays
+    bounded where the ledger bounds it (cash, max_open_lots) — max_rungs was never that cap."""
+    scale = ext_mult / grid_params.range_atr_mult
+    return replace(grid_params, range_atr_mult=ext_mult,
+                   max_rungs=max(grid_params.min_rungs, round(grid_params.max_rungs * scale)))
+
+
 def run_grid_backtest(
     bars: List[OHLCV],
     plan_series: GridPlanSeries,
@@ -74,25 +84,30 @@ def run_grid_backtest(
             bars_with_active_plan += 1
 
         activity_before = (ledger.lots_opened, ledger.grid_trades)
-        if plan is None:
-            pass
-        elif policy.should_force_close(i, bar, plan, ledger):
-            ledger.force_close_all(bar.close, ts_ms)
-            cooldown_until = i + grid_params.cooldown_bars
-        elif i <= cooldown_until:
-            pass   # stopped out: stay flat instead of reopening on the same broken ladder
-        else:
+        # Two independent steps, in this order. The stop is decided on bar i's CLOSE, so the
+        # orders resting during bar i must fill first — the price traded through them on its way
+        # to that close. Checking the stop first (an if/elif) skipped them: same-bar look-ahead
+        # that hid exactly the losing buys of a breakdown.
+        # 1. Fills (not while cooling down after a stop: stay flat, don't reopen the broken ladder).
+        if plan is not None and i > cooldown_until:
             # Decided on bars[i-1] -- the bar plans[i-1] came from -- never on bar i itself.
             ext_mult = policy.extend_range_mult(i, bars[i - 1], plan, ledger)
             levels = plan.levels
             if ext_mult is not None and levels is not None:
-                extended_params = replace(grid_params, range_atr_mult=ext_mult)
                 # The extension is deliberately past structure, so no swing clamp -- clamping to
                 # the same pivot would just rebuild the unextended ladder.
                 levels = compute_levels(
-                    center=levels.center, atr=plan_series.regime.atr[i - 1], params=extended_params,
+                    center=levels.center, atr=plan_series.regime.atr[i - 1],
+                    params=extended_params(grid_params, ext_mult),
                 )
-            process_bar_fills(ledger, levels, plan.direction, bar, ts_ms, allow_intrabar_roundtrip)
+            process_bar_fills(ledger, levels, plan.direction, bar, ts_ms, allow_intrabar_roundtrip,
+                              ref_price=bars[i - 1].close)   # i > 0: plan is None on bar 0
+        # Exposure that existed during the bar counts even if the stop closes it below.
+        max_inventory = max(max_inventory, ledger.inventory_notional(bar.close))
+        # 2. Stop — evaluated during cooldown too, exactly as before.
+        if plan is not None and policy.should_force_close(i, bar, plan, ledger):
+            ledger.force_close_all(bar.close, ts_ms)
+            cooldown_until = i + grid_params.cooldown_bars
         if (ledger.lots_opened, ledger.grid_trades) != activity_before:
             bars_with_fills += 1
 

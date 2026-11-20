@@ -91,7 +91,7 @@ def test_process_bar_fills_opens_a_long_rung_when_price_touches_it():
         low, high = 97.5, 98.5
 
     process_bar_fills(ledger, levels, GridDirection.LONG_BIASED, _Bar(), ts_ms=0,
-                      allow_intrabar_roundtrip=False)
+                      allow_intrabar_roundtrip=False, ref_price=99.0)
     assert len(ledger.open_lots) == 1
     lot = next(iter(ledger.open_lots.values()))
     assert lot.entry_price == 98.0             # rung index 1 (98.0) touched
@@ -106,7 +106,7 @@ def test_process_bar_fills_skips_same_bar_roundtrip_when_disallowed():
         low, high = 97.5, 100.5   # touches both rung 98 (open) and rung 100 (its own target)
 
     process_bar_fills(ledger, levels, GridDirection.LONG_BIASED, _Bar(), ts_ms=0,
-                      allow_intrabar_roundtrip=False)
+                      allow_intrabar_roundtrip=False, ref_price=99.0)
     assert not any(lot.entry_price == 98.0 for lot in ledger.open_lots.values())
 
 
@@ -121,7 +121,7 @@ def test_process_bar_fills_does_not_reopen_a_slot_whose_ladder_has_merely_shifte
         low, high = 97.5, 98.5
 
     process_bar_fills(ledger, levels_a, GridDirection.LONG_BIASED, _BarA(), ts_ms=0,
-                      allow_intrabar_roundtrip=False)
+                      allow_intrabar_roundtrip=False, ref_price=99.0)
     assert len(ledger.open_lots) == 1
 
     # Next bar's ladder has shifted slightly (98.0 -> 98.05, same relative shape) -- a real
@@ -132,7 +132,7 @@ def test_process_bar_fills_does_not_reopen_a_slot_whose_ladder_has_merely_shifte
         low, high = 97.55, 98.55
 
     process_bar_fills(ledger, levels_b, GridDirection.LONG_BIASED, _BarB(), ts_ms=1,
-                      allow_intrabar_roundtrip=False)
+                      allow_intrabar_roundtrip=False, ref_price=99.05)
     # Still just the one lot -- the shifted rung at 98.05 is within tolerance of the existing
     # lot at 98.0, so it must be treated as the same slot, not a new one.
     assert len(ledger.open_lots) == 1
@@ -147,7 +147,7 @@ def test_process_bar_fills_opens_a_genuinely_new_lot_at_a_distant_price():
         low, high = 97.5, 98.5
 
     process_bar_fills(ledger, levels_a, GridDirection.LONG_BIASED, _BarA(), ts_ms=0,
-                      allow_intrabar_roundtrip=False)
+                      allow_intrabar_roundtrip=False, ref_price=99.0)
     assert len(ledger.open_lots) == 1
 
     # A much lower ladder, far from the existing lot's price -- a genuinely different rung.
@@ -157,7 +157,7 @@ def test_process_bar_fills_opens_a_genuinely_new_lot_at_a_distant_price():
         low, high = 47.5, 48.5
 
     process_bar_fills(ledger, levels_b, GridDirection.LONG_BIASED, _BarB(), ts_ms=1,
-                      allow_intrabar_roundtrip=False)
+                      allow_intrabar_roundtrip=False, ref_price=49.0)
     assert len(ledger.open_lots) == 2
 
 
@@ -172,7 +172,7 @@ def test_long_open_is_skipped_when_cash_cannot_afford_another_lot():
         low, high = 97.5, 98.5
 
     process_bar_fills(ledger, levels, GridDirection.LONG_BIASED, _Bar(), ts_ms=0,
-                      allow_intrabar_roundtrip=False)
+                      allow_intrabar_roundtrip=False, ref_price=99.0)
     assert ledger.open_lots == {}
 
 
@@ -189,7 +189,7 @@ def test_short_open_is_capped_by_max_open_lots_not_by_cash():
             high = price + 0.5
 
         process_bar_fills(ledger, levels, GridDirection.SHORT_BIASED, _Bar(), ts_ms=i,
-                          allow_intrabar_roundtrip=False)
+                          allow_intrabar_roundtrip=False, ref_price=price - 1.0)
     assert len(ledger.open_lots) == 2   # the third open was refused by the cap
 
 
@@ -201,8 +201,54 @@ def test_intrabar_roundtrip_flag_opens_and_closes_in_the_same_bar():
 
     strict, loose = _ledger(), _ledger()
     process_bar_fills(strict, levels, GridDirection.LONG_BIASED, _Bar(), ts_ms=0,
-                      allow_intrabar_roundtrip=False)
+                      allow_intrabar_roundtrip=False, ref_price=99.0)
     process_bar_fills(loose, levels, GridDirection.LONG_BIASED, _Bar(), ts_ms=0,
-                      allow_intrabar_roundtrip=True)
+                      allow_intrabar_roundtrip=True, ref_price=99.0)
     assert strict.grid_trades == 0
     assert loose.grid_trades >= 1 and loose.grid_realized_pnl > 0
+
+
+def test_long_never_opens_on_a_rung_that_was_above_the_market():
+    """Review #1: a buy limit only rests BELOW the market. Previous close 103; the bar rallies
+    through 104-106. Those rungs were above the market when the order would have been placed,
+    so they are not resting buys — nothing opens (old code opened a long at 106)."""
+    levels = GridLevels(center=105.0, step_pct=0.01, rungs=[float(p) for p in range(100, 111)])
+    ledger = _ledger(notional_per_rung=100.0, cash=1_000_000.0)
+
+    class _Bar:
+        low, high = 103.5, 106.5
+
+    process_bar_fills(ledger, levels, GridDirection.LONG_BIASED, _Bar(), ts_ms=0,
+                      allow_intrabar_roundtrip=False, ref_price=103.0)
+    assert ledger.open_lots == {}
+
+
+def test_short_never_opens_on_a_rung_that_was_below_the_market():
+    """Mirror of the above: a sell limit only rests ABOVE the market. Previous close 107, the
+    bar falls through 104-106 — no short opens at 104 (or anywhere)."""
+    levels = GridLevels(center=105.0, step_pct=0.01, rungs=[float(p) for p in range(100, 111)])
+    ledger = _ledger(notional_per_rung=100.0, cash=1_000_000.0)
+
+    class _Bar:
+        low, high = 103.5, 106.5
+
+    process_bar_fills(ledger, levels, GridDirection.SHORT_BIASED, _Bar(), ts_ms=0,
+                      allow_intrabar_roundtrip=False, ref_price=107.0)
+    assert ledger.open_lots == {}
+
+
+def test_long_still_opens_on_resting_rungs_below_the_previous_close():
+    """The fix must not stop genuine fills: previous close 107, the bar dips to 103.5 → the
+    resting buys at 104, 105, 106 fill."""
+    levels = GridLevels(center=105.0, step_pct=0.01, rungs=[float(p) for p in range(100, 111)])
+    ledger = _ledger(notional_per_rung=100.0, cash=1_000_000.0)
+
+    class _Bar:
+        low, high = 103.5, 106.5
+
+    process_bar_fills(ledger, levels, GridDirection.LONG_BIASED, _Bar(), ts_ms=0,
+                      allow_intrabar_roundtrip=False, ref_price=107.0)
+    # 106's target (107) and 105's target (106)... are touched only for 104→105 and 105→106 and
+    # 106→107? The bar's high is 106.5: targets 105 and 106 are inside it, 107 is not. With
+    # roundtrips disallowed, only the rung whose target was NOT touched opens: 106 (target 107).
+    assert sorted(lot.entry_price for lot in ledger.open_lots.values()) == [106.0]

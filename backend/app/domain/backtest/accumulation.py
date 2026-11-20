@@ -113,6 +113,34 @@ class FlatDcaPolicy:
         return (ledger.cash, 0.0)
 
 
+class TrendGatedDcaPolicy:
+    """DCA with the trend filter as an on/off switch (TODO 🚦 A4b/A4c).
+
+    While the close is above its `period`-bar SMA: invest all available cash (new deposits plus
+    anything saved). Below it: buy nothing and keep deposits as cash — and, with
+    `sell_below=True`, also sell every unit held. Until there is enough history for the average,
+    behave like plain DCA. Uses closes up to and including bar i only (decide and fill at the
+    close, the simulator's convention), so no future data."""
+
+    def __init__(self, period: int = 100, sell_below: bool = False) -> None:
+        if period < 2:
+            raise ValueError("period must be >= 2")
+        self.period = period
+        self.sell_below = sell_below
+
+    def prepare(self, bars: List[OHLCV]) -> None:
+        return None
+
+    def decide(self, i, bars, ledger, ctx) -> Tuple[float, float]:
+        if i + 1 < self.period:
+            return (ledger.cash, 0.0)
+        window = bars[i + 1 - self.period: i + 1]
+        above = bars[i].close > sum(b.close for b in window) / self.period
+        if above:
+            return (ledger.cash, 0.0)
+        return (0.0, ledger.units if self.sell_below else 0.0)
+
+
 class CycleWeightedPolicy:
     """Deploy scaled by cycle buy-intensity x price confirmation; optionally distribute into
     the predicted-top window. Precomputes running expanding-high and rolling-window high/low

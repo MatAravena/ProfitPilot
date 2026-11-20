@@ -149,8 +149,10 @@ class GridLedger(Ledger):
 
 def process_bar_fills(
     ledger: GridLedger, levels: Optional[GridLevels], direction: GridDirection, bar: _Bar,
-    ts_ms: int, allow_intrabar_roundtrip: bool,
+    ts_ms: int, allow_intrabar_roundtrip: bool, *, ref_price: float,
 ) -> None:
+    """`ref_price` is where the market was when the orders were placed (the previous close):
+    a buy limit only rests below it and a sell limit only above it."""
     # 1. Close any open lot whose target price traded this bar.
     #
     #    The target is a RESTING limit order at a price fixed when the lot opened, so whether it
@@ -182,6 +184,9 @@ def process_bar_fills(
     if levels is None:
         return
     rungs = levels.rungs
+    # ponytail: a rung the bar GAPS through (previous close 103, bar opens at 99, low 98.5) is
+    # still found here only if it lies inside [low, high]; one below the whole bar is missed.
+    # Model the open/gap explicitly if gap-heavy markets (stocks) ever run on this simulator.
     crossed = {i for i, r in enumerate(rungs) if bar.low <= r <= bar.high}
     if not crossed:
         return
@@ -202,6 +207,11 @@ def process_bar_fills(
     last_index = len(rungs) - 1
     tol_pct = levels.step_pct / 2
     for i in sorted(crossed):
+        # Only a rung on the RESTING side of the market can be an entry: a buy limit sits below
+        # where price was, a sell limit above. A rung the bar merely traded through on the other
+        # side was never an order — opening it is entering at a price you couldn't have bid.
+        if (rungs[i] >= ref_price) if is_long_side else (rungs[i] <= ref_price):
+            continue
         if ledger.has_lot_near(rungs[i], tol_pct):
             continue
         if len(ledger.open_lots) >= ledger.max_open_lots:

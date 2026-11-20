@@ -24,9 +24,19 @@ Standing decisions (user calls — do not relitigate, do not silently undo):
 - **ML forecasting and LLM enrichment are still wanted** — do not propose removing the adapters or stubs. They are gated: a model must beat the plain trend baseline out-of-sample (walk-forward) before it sizes a trade.
 - **No strategy result is reported without out-of-sample evidence and a buy-and-hold benchmark.** An in-sample best-of-sweep is not an edge.
 
+**Evaluating a strategy = the research CLI, never an in-sample sweep.** From `backend/`:
+`python scripts/research.py strategies` and
+`python scripts/research.py walk-forward <Strategy> --symbol BTCUSDT --grid '{"period":[50,100,150]}'`.
+It prints JSON with `passes_bar` first (out-of-sample return/max-DD beats buy-and-hold, > 50 %
+of folds profitable, OOS Sharpe ≥ 0.5 — defined once in `domain/backtest/walk_forward.passes_bar`).
+Report that verdict and the out-of-sample numbers; never quote an in-sample best as evidence.
+A new strategy's hypothesis and pass test go into `TODO.md` *before* its first run.
+`scripts/grid_search_strategies.py` is the old in-sample sweep — superseded, don't use it.
+
 Working-copy facts that trip up new sessions:
 
-- `TODO.md`, `CLAUDE.md`, and the design/spec docs are **git-ignored** — they exist only in the main checkout and never appear in a git worktree. A session isolated in a worktree cannot update them in place; it must hand the user the edited copy.
+- **Work directly in the main checkout — no git worktrees** (user's call, 2026-11-15; `.claude/settings.json` sets `worktree.bgIsolation: none` so background sessions may edit main). Leave changes uncommitted for the user to commit.
+- `TODO.md` and `CLAUDE.md` are git-tracked. The design/spec docs (`docs/*`) and `PROFITPILOT_PROJECT_INSTRUCTIONS.md` are still git-ignored.
 - `backend/profitpilot.db` is the real dev DB. Query it read-only unless the user asks for a change; tests must run against in-memory SQLite (see `conftest.py`).
 
 ## Permissions
@@ -37,14 +47,23 @@ PowerShell (and Bash) commands that **run tests** — e.g. `pytest`, `vitest`, `
 
 ## Commands
 
-### Full stack (Docker)
-```bash
-# Always-on host (one container: API + built frontend, SQLite on a volume) — see README "Run it always-on"
-docker compose -f docker/docker-compose.host.yml up -d --build
-docker compose -f docker/docker-compose.host.yml logs -f app
-
-# docker/docker-compose.yml starts ONLY TimescaleDB + Redis (Phase 2 infra; nothing uses them yet)
+### Always-on host (the old PC) — native Windows by default, no Docker (user's call, 2026-11-18)
+```powershell
+# Once, admin PowerShell: venv + frontend build + boot task "ProfitPilot" (runs deploy\windows\run.ps1)
+powershell -ExecutionPolicy Bypass -File deploy\windows\install.ps1
+# Update: git pull + packages + build + restart + health check (GitHub deploy calls it with -AppDir/-Source)
+powershell -ExecutionPolicy Bypass -File deploy\windows\update.ps1
+# Data/settings/logs live in C:\ProfitPilot (profitpilot.env, data\, backups\, logs\) — never in the repo
 ```
+**Running bots must survive every update.** Their state is in the DB and the executor resumes it
+on boot (`tests/integration/test_restart_continuity.py`). So: never rename a registered strategy
+class or its parameter keys while instances may exist (add a new class/key instead); never write
+a migration that drops or rewrites strategy, order or sim-ledger data without a data-preserving
+path; and keep re-processing a bar idempotent (a repeated intent must stay a no-op).
+
+Docker (`Dockerfile`, `docker/docker-compose.host.yml`) is kept as an alternative, selected in the
+deploy workflow by repo variable `PROFITPILOT_DEPLOY=docker`. `docker/docker-compose.yml` starts
+ONLY TimescaleDB + Redis (Phase 2 infra; nothing uses them yet). See README "Run it always-on".
 
 ### Backend
 ```bash

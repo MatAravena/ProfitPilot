@@ -30,10 +30,25 @@ is a future discussion.
 
 ### Step 1 — Host it on the old PC (always-on)
 
-> **Repo side built 2026-11-13** (uncommitted, branch `worktree-todo-roadmap-review`) — what is
-> left in this step is on the physical box, plus Alembic. Setup instructions: README →
-> "Run it always-on". **Not yet verified:** the Docker image has never been built and the
-> workflow has never run — the first `docker compose … up --build` on the box is the real test.
+> **Repo side built 2026-11-13; ready to publish — verified 2026-11-15** with Docker Desktop on
+> the dev machine: image builds, `up --wait` healthy, API + served frontend + docs answer,
+> migrations to head on an empty DB, non-root, no `.env` in the image, and the agreed paper lineup
+> (`backend/scripts/paper_lineup.py`, 7 strategies) ran its first live-data cycle with paper fills
+> and zero errors; a restart kept all orders and resumed all 7 loops. Still unverifiable off the
+> box: the GitHub self-hosted runner, Telegram delivery, the 07:00 UTC heartbeat + backup.
+> **2026-11-18 — native Windows is now the default (user prefers no Docker; old PC's OS not
+> decided yet, Windows assumed).** `deploy/windows/{install,run,update}.ps1`: Task Scheduler boot
+> task as the user (not SYSTEM), restart-on-exit loop, settings/data/backups/logs in
+> `C:\ProfitPilot`, deploy workflow runs `update.ps1 -AppDir -Source` (no GitHub credentials on
+> the box). Verified on the dev machine: scripts parse; update built everything; `run.ps1` served
+> API + frontend from a scratch home and recovered from a killed server in ~10 s; the copy step
+> excludes `.venv`/`.git`/`.env`/dev DB. **Untested: `install.ps1`'s task registration** (would
+> change this machine's startup) — it is day-one step 4. Docker kept as an option
+> (`PROFITPILOT_DEPLOY=docker`). Linux: documented, not scripted — script it if the box is Linux.
+> **Day-one checklist (10 steps, each with a "done when"): README → "Run it always-on".**
+> - [ ] Small cleanup: `user_strategies/TEMPLATE.py` registers a `MyStrategy` that shows up in the
+>   strategy list (the loader only skips files starting with `_`). Rename to `_TEMPLATE.py` if you
+>   don't want it listed — your file, your call.
 >
 > Two things the plan assumed that were not true, found while doing it: (1) there were **no
 > Dockerfiles** and `docker/docker-compose.yml` only starts Postgres + Redis (its api/frontend
@@ -146,7 +161,17 @@ is a future discussion.
     A 4h run with a 4-parameter strategy (81 combos) can take a few minutes — no progress bar.
   - [ ] **Not built:** a parameter-plateau check in the panel (neighbours of the winner also
     profitable?) — done by hand for TrendFilter in the Step 5b log.
-  - [ ] Grid-bot sweep through walk-forward — after the 3 open 2026-11-13 grid findings below.
+  - [x] Grid-bot validation — done 2026-11-15 after fixing the 3 review findings: **fails** with
+  shipped defaults on BTC and ETH (see 📏 Grid validation run below). Not worth a parameter
+  walk-forward: a strategy that loses with defaults and needs tuning to pass is the overfitting
+  trap this whole pipeline exists to avoid.
+- [x] **Bybit pagination bugs fixed** _(2026-11-15, found during the grid run)_ — (1) with a start
+  but no end, `_fetch_bybit_paginated` returned only the first 1,000 bars (Bybit returns the
+  OLDEST bars after a bare start, so paging backward found nothing): a 2019→now hourly request gave
+  6 weeks of 2020; (2) a 20-page cap silently cut long hourly ranges to ~2.3 years. Now a missing
+  end defaults to now, the cap is 200 pages and logs a warning when hit. 3 tests with a fake that
+  mirrors Bybit's probed behaviour. Affected any long 1h/4h crypto backtest that fell back to
+  Bybit; daily runs (Yahoo) were not affected.
 - [x] **Backtest engine no longer quadratic** _(2026-11-14)_ — the cost was not indicators but
   the engine handing the strategy the **whole history** every bar. It now passes the last
   `STRATEGY_LOOKBACK_BARS` (500, `core/constants.py`) — the **same window the live executor now
@@ -286,6 +311,17 @@ is a future discussion.
 > universe + a ranking function + a rebalance schedule; output = target weights; execution goes
 > through the existing `ExecutionEngine`/`RiskManager` per symbol. Not before.
 
+- [ ] **B0 · Global multi-market trend/momentum — NEXT** _(user direction 2026-11-15: use Alpaca
+  and later other brokers for stocks/ETFs "across the globe", not only crypto)_. Alpaca alone
+  reaches most of the world through US-listed ETFs: country (EWJ Japan, EWG Germany, EWU UK, EWZ
+  Brazil, INDA India, MCHI China, EWY Korea, EWA Australia, EWC Canada), regions (VGK, EEM),
+  sectors, bonds (IEF, TLT, BNDX), commodities (GLD, DBC, USO), real estate (VNQ, VNQI), plus BTC.
+  The documented edge is **not** price gaps between exchanges (that is HFT territory) but
+  **diversified trend following**: the same trend rule on many weakly correlated markets is
+  smoother than on any one of them. Our own evidence agrees — trend works on BTC alone, and on 5
+  ETFs it already cut drawdown by two-thirds. Needs the Tier B portfolio engine (rank/filter a
+  universe, rebalance). Pre-register before building: universe, rule (trend filter + 12-month
+  momentum rank, top-N equal weight), monthly rebalance, pass bar incl. **multiple end dates**.
 - [ ] **B1 · Dual momentum on ETFs (monthly).** Each month hold the strongest of a small ETF set
   over the past ~12 months, but only if it also beat cash; otherwise bonds/cash. *Why:* combines
   relative strength with the A2 trend filter. *Weakness:* concentrated in one asset at a time;
@@ -374,6 +410,63 @@ buy-and-hold over the same windows · > 50% of folds profitable · OOS Sharpe �
   1.31 / 53% · 10% 1.25 / 74% · 20% 1.24 / 74% · 25% 1.27 / 74%. Unlike MACD (crossover
   *events*), TrendFilter re-signals LONG every bar it is above the average, so a stop-out simply
   re-enters next day. A wide stop keeps more folds profitable and trades less.
+**Full-history re-run (2026-11-15)** — the tables above used the DB cache, where ETH only started
+in 2020 (missing the 2017–18 boom and −94% bust). Re-run on Yahoo's complete daily history
+(BTC 2014-09 →, ETH 2017-11 →), same grids and walk-forward settings, verdict = `passes_bar`:
+
+| strategy | BTC 2014→ OOS (DD, Sharpe) | ETH 2017→ OOS (DD, Sharpe) |
+|---|---|---|
+| MacdCrossover | **PASS** +15,078% (63%, 1.34) | fail +706% (60%, 0.84) |
+| TrendFilter | **PASS** +19,259% (72%, 1.28) | fail +367% (73%, 0.68) |
+| DonchianBreakout | fail +11,341% (69%, 1.28) | fail +571% (61%, 0.80) |
+| SmaCrossover | fail +4,308% (71%, 1.14) | fail +199% (61%, 0.58) |
+| RsiPullbackInTrend | fail +180% (47%, 0.51) | fail +90% (61%, 0.44) |
+| RsiMeanReversion | fail +105% (64%, 0.38) | fail −47% (80%, 0.00) |
+| BollingerBandsMeanReversion | fail −29% (72%, 0.10) | fail −76% (82%, −0.27) |
+| *buy & hold* | +13,699% (82%) | +1,143% (80%) |
+
+Same conclusion on the full record: **only MACD and TrendFilter on BTC pass**; on ETH every trend
+strategy cuts the drawdown (60–73% vs 80%) but gives up too much return to beat holding on
+return/DD. Mean-reversion fails everywhere.
+
+**Gate-1 hypothesis — A4b/A4c · trend-aware DCA — written 2026-11-15 BEFORE any run. Do not edit.**
+User question: can buying/selling logic beat plain DCA? The grid failed on breakdowns; the trend
+filter is the one tested breakdown detector. Two arms in the accumulation simulator, both vs
+`dca_flat` with identical deposits ($100 every 7 days):
+- **A4b `dca_trend_pause`** — while close > its 100-day SMA, invest all available cash; below it,
+  keep holdings, save new deposits as cash; invest the savings when back above.
+- **A4c `dca_trend_switch`** — as A4b, but also SELL all holdings when below, re-buy when above.
+*Why it might pay:* both avoid adding (A4b) or holding (A4c) through the deep bear legs; the saved
+cash buys back near the start of the next uptrend. *Wrong if:* the time spent in cash in bull
+markets, plus whipsaws, cost more than the bear legs avoided — then plain DCA wins on final value.
+Fixed: SMA period **100**, chosen up front from the middle of TrendFilter's BTC plateau, not tuned
+here. Full Yahoo daily history — BTC 2014-09 →, ETH 2017-11 →. 0.1% fee + 5 bps slippage.
+**Pass (per arm, on BTC; ETH reported):** final value ≥ 90% of plain DCA's **and** max drawdown of
+the account ≤ ⅔ of plain DCA's — or a higher final value with no worse drawdown.
+
+**A4b/A4c result (2026-11-15) — ❌ does NOT beat plain DCA; it is drawdown control only.**
+`TrendGatedDcaPolicy(period, sell_below)` in `domain/backtest/accumulation.py` (6 tests incl.
+causality). $100/week, full history, measured on 2026-11-14:
+
+| | BTC 2014→ (put in $63.5k) | ETH 2017→ (put in $47.1k) |
+|---|---|---|
+| plain DCA | $2.53M, max DD 83% | $150k, max DD 79% |
+| pause (A4b) | $2.43M, DD 83% — fail | $161k, DD 79% — "pass" |
+| switch (A4c) | $3.94M, DD 60% — "PASS" | $174k, DD 72% — "PASS" |
+
+Switch periods 50–200: 9/10 "pass", every one with lower drawdown (55–72%) and higher Sharpe.
+**But the end date flatters it:** on 2026-11-14 every switch variant is in cash right after a
+fall. Re-measured at every year end and every all-time high before a 20%+ drop, switch-100 is
+**ahead of plain DCA on only 6/24 dates (BTC) and 2/28 (ETH)** — typically 0.45–0.8× DCA's value
+at peaks and most year ends. Verdict: it reliably cuts drawdown (≈ −10 to −25 points) and Sharpe
+improves, but **it does not reliably make more money than DCA** — same trade-off as A2 (ETFs).
+Plain DCA remains the honest default for accumulating; switch-DCA is a calmer, usually-poorer
+alternative. Not wired into the DCA-compare UI for that reason.
+- **Lesson → rule for accumulation strategies:** a single end date is not a test. Judge them
+  across many end dates (year ends + market peaks); a win that appears only at one end point is
+  path luck. The pre-registered A4 bar above didn't require this — it should have. Apply it to
+  every future DCA / halving-cycle comparison (the 📊 `dca-compare` results included).
+
 **Gate-1 hypothesis — A2 · ETF trend timing — written BEFORE any ETF backtest. Do not edit.**
 `TrendFilter` (already built) on each of five asset-class ETFs: SPY (US stocks), EFA
 (international stocks), IEF (US 7–10y Treasuries), VNQ (US real estate), DBC (commodities).
@@ -640,7 +733,54 @@ re-homed).
 - [ ] **Follow-up:** `GridControls` doesn't prevent the invalid combos above client-side — the
   user just gets the API 422. Add inline hints if it bites.
 
-### 🔎 Code review findings — 2026-11-13 — ❌ 3 open, fix BEFORE the validation sweep
+### 📏 Grid validation run — pre-registered 2026-11-15, BEFORE running
+
+**Default `GridParams` / `RegimeParams` only — no tuning, so nothing to overfit.** BTCUSDT +
+ETHUSDT 1h from Bybit, 2019-01-01 → latest; the Nov-2021 → Nov-2022 bear slice reported
+separately. Both arms, `notional_per_rung` = 2% of a 10,000 start, default
+`allow_intrabar_roundtrip=False`. Compared with buy-and-hold on the same capital (100% invested)
+and with cash.
+**Pass (the deployable arm, `grid_guarded_reanchor`, on both symbols):** total return > 0, Sharpe
+≥ 0.5, **and** return/max-DD better than buy-and-hold's — the same bar as every other strategy.
+`grid_accumulate_nostop` is reported for its failure mode (bear-slice drawdown, inventory), not
+judged as deployable. If the guarded arm fails, the grid family stays backtest-only: no live
+execution work (resting orders, partial fills) gets built for it.
+
+**Result (2026-11-15) — ❌ FAILS on both symbols. Grid stays backtest-only; no live work.**
+Data: Bybit 1h perp from its listing (BTC 2020-03, ETH 2021-03 — not 2019 as registered; Bybit
+has nothing earlier).
+
+| | guarded (deployable) | no-stop | buy & hold |
+|---|---|---|---|
+| BTC full | **−255%**, DD 331%, Sharpe 1.14 | −316%, DD 750% | +891%, DD 77% |
+| ETH full | **−38%**, DD 64%, Sharpe −0.16 | +24%, DD 35% | −3%, DD 81% |
+| BTC bear 21–22 | −7.1%, DD 10.9% | −11.8% | −66.7% |
+| ETH bear 21–22 | −10.3%, DD 12.3% | −9.9% | −63.6% |
+
+- **Classic grid failure, measured:** BTC guarded earned **+$4,132 grid income** over 2,968 completed
+  round trips, then gave back **−$29,598 in 6 stop-outs**. Steady small wins, rare large losses.
+- In the bear slices it loses far less than holding — but it still loses, and it is a long-biased
+  bot losing money in a market that halved, not a hedge.
+- ETH no-stop's +24% beats ETH buy-and-hold only because ETH went nowhere over the sample; that arm
+  carries a 72% worst unrealized loss and is not deployable by design.
+- [ ] **New finding — the grid simulator lets equity go below zero.** −255% return and 345% worst
+  unrealized are impossible for a real account (liquidated first). Shorts add cash on open, so the
+  cash check never binds them; `max_open_lots` is the only brake and lets inventory reach $42k on a
+  $10k account. Fix before trusting any grid number again: refuse an open when total inventory
+  notional would exceed equity × max leverage (1× for spot-like), and end the run (ruin) at equity
+  ≤ 0. Low priority now that the family is parked — but every grid number above is flattered or
+  worsened by it, not neutral.
+
+### 🔎 Code review findings — 2026-11-13 — ✅ all fixed 2026-11-15
+
+> **Done, TDD, each test confirmed failing on the old code for the stated reason** (462 backend
+> tests pass). #1: `process_bar_fills(…, ref_price=)` — the repro opened a long at 106 / short at
+> 104 before; now nothing. Three simulator tests encoded the bug and were re-derived by hand (see
+> their comments). #2: fills then stop as two steps; `max_inventory` is sampled before the stop.
+> **Correction to the brief:** in the #2 repro only the **98** buy opens, not 98 *and* 96 — 96's
+> sell target (98) is touched in the same bar, so the default no-same-bar-round-trip rule
+> correctly skips it. #3: new `simulator.extended_params` scales `max_rungs` with the range;
+> extensions now reach 76 / 64 / 52 (were 83.61 / 83.21 / 83.80). README updated.
 
 > From the second `/code-review` of the grid commits (`02b55c7..a9274c2`). All three were confirmed
 > by reading the code at HEAD; #1 and #3 also by a numeric probe. CLAUDE.md compliance, ledger
@@ -658,7 +798,7 @@ re-homed).
 > - Then update the README grid section (see the last item), run `graphify update .`, and tick the
 >   boxes here. **Never commit or stage** — the user does that.
 
-- [ ] 🔴 **#1 — Entries open on the wrong side of the market** · `ledger.py::process_bar_fills`
+- [x] 🔴 **#1 — Entries open on the wrong side of the market** · `ledger.py::process_bar_fills`
   (the `crossed = {… if bar.low <= r <= bar.high}` line and the open loop below it)
   - **What's wrong:** every rung the bar's range touches becomes an entry. Nothing checks where
     price was *before* the bar, so a long opens on a rung that was above the market when the order
@@ -680,7 +820,7 @@ re-homed).
     (previous close 103, bar opens at 99) is still missed by the `bar.low <= r <= bar.high` test.
     Don't fix it here.
 
-- [ ] 🔴 **#2 — The stop-out bar skips its own fills** · `simulator.py::run_grid_backtest`
+- [x] 🔴 **#2 — The stop-out bar skips its own fills** · `simulator.py::run_grid_backtest`
   (the `elif policy.should_force_close(...)` branch)
   - **What's wrong:** `should_force_close` decides on bar `i`'s close, and because it sits in an
     `if/elif` chain ahead of `process_bar_fills`, that bar's resting orders never fill. Buys the
@@ -703,7 +843,7 @@ re-homed).
     `test_cooldown_keeps_the_grid_flat_after_a_forced_close` to need re-derived numbers; the
     reconciliation identity itself (`grid + forced + mark-to-market == total`) must still hold.
 
-- [ ] 🟠 **#3 — `max_extensions` above 1 does nothing when ATR spacing sets the step** ·
+- [x] 🟠 **#3 — `max_extensions` above 1 does nothing when ATR spacing sets the step** ·
   `simulator.py` (where `extended_params` is built) + `levels.py::_clamp_rung_count`
   - **What's wrong:** the extended ladder is rebuilt through `compute_levels`, which always ends in
     `_clamp_rung_count`. Once the natural rung count exceeds `max_rungs`, the clamp cuts
@@ -722,7 +862,7 @@ re-homed).
   - **If the recommended fix turns out wrong** (e.g. the scaled ladder makes a sweep too slow),
     stop and write the finding here instead of inventing a different clamp.
 
-- [ ] ⚪ **README is stale about grid status** — the grid section says it's built, but three other
+- [x] ⚪ **README is stale about grid status** — the grid section says it's built, but three other
   lines still say it isn't: the `strategies/  # PLANNED` line in the directory tree, "grid
   designed in full, none built" in the roadmap checklist, and "is the first one queued" in the
   strategy-families note. Fix those, and add the #1/#2 behaviour to the "Fill realism" paragraph

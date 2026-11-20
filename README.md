@@ -349,6 +349,13 @@ that income is real, or whether the "profit" is just mark-to-market drift on inv
 forced to hold — so the scoreboard **splits realized grid income from inventory mark-to-market**
 rather than reporting one blended number.
 
+**Verdict (2026-11-15): it doesn't earn.** With its shipped defaults on BTC and ETH hourly data
+(2020–2026) the deployable guarded arm lost money on both, while the grid income itself was real —
+on BTC about +$4.1k from ~3,000 round trips, wiped out by −$29.6k in six stop-outs. That's the
+textbook grid-bot profile: many small wins, a few large losses. The family stays backtest-only.
+Known simulator gap: it doesn't stop equity going below zero (no margin/liquidation), so treat the
+size of its losses as indicative, not exact — see `TODO.md`.
+
 Lives in its own pure-domain module, `domain/strategies/grid/`, one file per responsibility:
 `params.py` (frozen knobs) · `levels.py` (rung geometry) · `regime.py` (regime gates) · `planner.py`
 (causal per-bar plan) · `ledger.py` (per-rung lot accounting) · `policies.py` (the two arms) ·
@@ -386,9 +393,14 @@ lot's sell fills once `bar.high` reaches it, a short lot's buy-back once `bar.lo
 the price *gapped through* still fill, as a real resting order would. `allow_intrabar_roundtrip` is
 `False` by default: letting one bar fill a buy on its low and the paired sell on its high is the
 classic way a grid backtest prints money that never existed (set it `True` to see that optimistic
-upper bound). The no-stop arm's extension is decided on the previous bar's close, never on the bar
-it then fills in. Profit is realized per **matched lot
-pair**, never average-cost drift.
+upper bound). An **entry** only fills on the resting side of the market: a buy rung must sit below
+the previous close, a sell rung above it — a rung the bar merely traded through on the other side was
+never an order you could have had. On a **stop-out bar** the resting orders fill *first* (the price
+traded through them on its way to the close that triggered the stop), then the stop closes
+everything — so a breakdown's losing buys are counted, not skipped. The no-stop arm's extension is
+decided on the previous bar's close, never on the bar it then fills in, and each extension's rung
+cap grows with its range so every extension reaches further than the last. Profit is realized per
+**matched lot pair**, never average-cost drift.
 
 **Causality is enforced by test, not by assertion.** Swing pivots are only confirmed N bars *after*
 the fact, which is a live look-ahead trap. A golden test truncates the bar series and asserts every
@@ -609,7 +621,7 @@ ProfitPilot/
 │   │   │   ├── instruments/      # InstrumentCatalog interface, registry, seed, conform_order
 │   │   │   ├── market_data/      # Yahoo Finance provider
 │   │   │   ├── risk/             # RiskManager
-│   │   │   ├── strategies/       # PLANNED — one module per strategy family (grid, arbitrage, …)
+│   │   │   ├── strategies/       # strategy families with their own simulators — grid/ (built)
 │   │   │   └── strategy/         # StrategyBase, registry, loader, examples
 │   │   ├── models/
 │   │   │   ├── db/               # SQLAlchemy ORM models
@@ -700,39 +712,106 @@ BINANCE_SECRET_KEY=...
 ### Run it always-on (a spare PC / home server)
 
 Paper and testnet strategies only produce a track record while the app is running, so they
-need a machine that stays on. The host setup is **one container**: the API serves the built
-frontend on a single port, SQLite lives on a Docker volume, and the container restarts itself
-after a crash or reboot. No Postgres, Redis, or Celery is needed for this.
+need a machine that stays on. The app is **one process on one port**: the API also serves the
+built frontend, SQLite holds the data, and migrations run on startup. No Postgres, Redis,
+Celery — and **no Docker needed**. The default is a native Windows install; Docker and Linux are
+alternatives below.
 
-**On the box, once:**
+#### Windows (default — no Docker)
 
-1. Install Docker (Docker Engine on Linux, or Docker Desktop on Windows). Turn off sleep, set
-   the BIOS to power on after a power loss, and keep the clock synced (NTP).
-2. Create the env file somewhere outside any git checkout, e.g. `/opt/profitpilot/.env`, from
-   `backend/.env.example`. Set a real `SECRET_KEY`; add `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`
-   for alerts. `DATABASE_URL`, `BACKUP_DIR`, `FRONTEND_DIST_DIR` and `DEBUG` are set by the compose
-   file — whatever the env file says for those is ignored.
-3. Start it:
-   ```bash
-   PROFITPILOT_ENV_FILE=/opt/profitpilot/.env \
-     docker compose -f docker/docker-compose.host.yml up -d --build
-   ```
-   Open `http://127.0.0.1:8000` on the box.
+Everything lives in two places: the code in a clone (e.g. `C:\Users\Lenovo\Documents\_WORKKKKK\ProfitPilot`) and your data in
+`C:\ProfitPilot` (`profitpilot.env` settings, `data\profitpilot.db`, `backups\`, `logs\`). Three
+scripts in `deploy\windows\`:
 
-**Remote access.** There is **no authentication in Phase 1**, so the port is published on
-loopback only. To reach it from another machine, install [Tailscale](https://tailscale.com) on
-both and set `PROFITPILOT_BIND` to the box's Tailscale IP. Never publish it on `0.0.0.0` on a
-network you don't control, and never port-forward it from your router.
+| Script | What it does |
+|---|---|
+| `install.ps1` | Once. Checks Python 3.11+/Node/git, creates `C:\ProfitPilot` and `profitpilot.env` (with a generated `SECRET_KEY`), installs packages, builds the frontend, registers a **Task Scheduler** task that starts the app at boot — before anyone logs in — as your user (not SYSTEM: the Builder runs pasted code), then starts it. |
+| `run.ps1` | What the task runs: loads `profitpilot.env`, sets the database/backup/frontend paths, starts the server, **restarts it 10 s after any exit**, logs to `C:\ProfitPilot\logs\`. |
+| `update.ps1` | New code → packages → frontend build → restart → waits for health. `git pull` by default; the GitHub deploy uses `-AppDir`/`-Source` instead (copies the runner's checkout, so the box needs no GitHub credentials). |
+
+**Day-one checklist on the old PC** — in order, each with how to know it worked:
+
+| # | Step | Done when |
+|---|---|---|
+| 1 | Windows: sleep **off**, BIOS "power on after AC loss", wired network, automatic updates set to restart outside market hours | the PC comes back on by itself after you pull the plug |
+| 2 | Install Python 3.11+ (python.org, tick *Add to PATH*), Node.js LTS, Git for Windows | `python --version`, `node --version`, `git --version` all answer in a new terminal |
+| 3 | `git clone <your private repo> C:\Users\Lenovo\Documents\_WORKKKKK\ProfitPilot` | `git -C C:\Users\Lenovo\Documents\_WORKKKKK\ProfitPilot log -1` shows your latest commit |
+| 4 | **Admin** PowerShell: `powershell -ExecutionPolicy Bypass -File C:\Users\Lenovo\Documents\_WORKKKKK\ProfitPilot\deploy\windows\install.ps1` (asks for your Windows password once) | it ends with *ProfitPilot is running*; `http://127.0.0.1:8000` opens |
+| 5 | Paper lineup: `C:\Users\Lenovo\Documents\_WORKKKKK\ProfitPilot\backend\.venv\Scripts\python.exe C:\Users\Lenovo\Documents\_WORKKKKK\ProfitPilot\backend\scripts\paper_lineup.py` | Strategies page shows 7 strategies in **paper** |
+| 6 | Telegram: create a bot with @BotFather, send it one message, add `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` to `C:\ProfitPilot\profitpilot.env`, then *Task Scheduler → ProfitPilot → End, Run* | the *Telegram test* command below delivers "hello from the box" to your phone |
+| 7 | Backups to another disk: add `BACKUP_DIR=D:\ProfitPilotBackups` (any other drive or a cloud-synced folder) to the env file; restart the task | after 07:00 UTC a `profitpilot-<date>.db` appears there **and** the Telegram "Daily:" message arrives |
+| 8 | Tailscale on this PC and your laptop; add `PROFITPILOT_BIND=<this PC's Tailscale IP>` to the env file; restart the task | the app opens from your laptop, and does **not** open from another device on your home Wi-Fi |
+| 9 | GitHub self-hosted runner (label `profitpilot`, installed as a service **running as your user**, so it can restart the task); the deploy targets `C:\Users\Lenovo\Documents\_WORKKKKK\ProfitPilot` (override with repo variable `PROFITPILOT_APP_DIR`) | a push to `main` shows the deploy job green and the box restarts on the new commit |
+| 10 | Reboot without logging in | health OK again and the Strategies page still shows the 7 strategies |
+
+*Telegram test* (step 6) — reads the token and chat id from your settings file and sends one message:
+
+```powershell
+$v = @{}
+Get-Content C:\ProfitPilot\profitpilot.env | Where-Object { $_ -match '^(TELEGRAM_\w+)=(.+)$' } |
+    ForEach-Object { $v[$Matches[1]] = $Matches[2] }
+Invoke-RestMethod "https://api.telegram.org/bot$($v.TELEGRAM_BOT_TOKEN)/sendMessage" -Method Post `
+    -Body @{ chat_id = $v.TELEGRAM_CHAT_ID; text = 'hello from the box' }
+```
+
+Bybit testnet and Alpaca paper keys are **not** needed for any of this — the lineup trades on the
+built-in paper broker with real prices. Add broker keys later (roadmap Step 2).
+
+**Verified 2026-11-18** on the dev machine: all three scripts parse; `update.ps1 -SkipPull`
+installed packages and built the frontend; `run.ps1` with a scratch home served the API, the
+frontend (incl. deep links) and `/api/docs`, put the database in `data\` and logs in `logs\`;
+killing the server process brought it back within ~10 s; the deploy copy step mirrors code while
+leaving `.venv`, `.git`, `.env` and the dev database out. **Not run here** (it would change this
+machine's startup): `install.ps1`'s task registration — step 4 above is its real test.
+
+#### Alternative: Docker
+
+Kept as an option (`Dockerfile`, `docker/docker-compose.host.yml`): one container, SQLite on a
+volume, `restart: unless-stopped`, non-root. Verified 2026-11-15 end to end (healthy, lineup
+traded, survived a restart). Use it by setting repo variable `PROFITPILOT_DEPLOY=docker` and
+`PROFITPILOT_ENV_FILE=<path to env file>`; then
+`docker compose -f docker/docker-compose.host.yml up -d --build --wait`, and the lineup with
+`docker compose -f docker/docker-compose.host.yml exec app python scripts/paper_lineup.py`.
+
+#### Alternative: Linux without Docker
+
+Same idea as Windows: a venv (`python3 -m venv backend/.venv && backend/.venv/bin/pip install -r
+backend/requirements.txt`), `npm ci && npm run build` in `frontend/`, and a systemd unit that
+starts uvicorn from `backend/` with `Restart=always`, `User=<you>`, `EnvironmentFile=` your env
+file, and `Environment=` for `DATABASE_URL=sqlite+aiosqlite:////opt/profitpilot/data/profitpilot.db`,
+`FRONTEND_DIST_DIR=<repo>/frontend/dist`, `BACKUP_DIR=…`, `DEBUG=false`. Not scripted yet — say
+the word if the old PC ends up on Linux.
+
+**Updates don't break running bots.** Everything a bot needs to continue lives in the database,
+not in memory: the strategy and its config/status, its paper account and open positions, the
+risk high-water mark, today's realised P&L. On startup the app resumes every paper/live
+strategy from there. `update.ps1` builds first (bots still running), then stops the app,
+snapshots the database to `C:\ProfitPilot\backups\pre-update\` (last 10 kept), installs packages,
+and **always** starts it again — even if the install fails — then checks health. Downtime is a
+minute or two, well inside a daily strategy's hourly poll.
+- *A bar processed twice* (the restart forgets which bar it last handled) is harmless: "buy" while
+  already long is a no-op. Proven by `tests/integration/test_restart_continuity.py`, for both
+  state strategies (TrendFilter) and crossover strategies (MACD).
+- *Stops are checked by the app*, not resting at a broker — while it's down (minutes) nothing
+  checks them. Fine for daily paper strategies; matters once real money is live.
+- *Live brokers (later):* if the app dies between a broker accepting an order and the database
+  saving it, the position is still found on restart (the broker is the source of truth for
+  positions), but that order's record is missing — the planned reconciliation loop closes this.
+- *Code changes:* never rename a strategy class or its parameter keys while instances of it
+  exist — add a new class/key instead. A bot whose class can't load raises an `ERROR`/`STALE`
+  alert rather than failing silently.
+- *If an update goes wrong:* stop the task, copy the newest `backups\pre-update\*.db` over
+  `C:\ProfitPilot\data\profitpilot.db`, `git checkout` the previous commit in the app folder, run
+  `update.ps1 -SkipPull`.
+
+**Remote access.** There is **no authentication in Phase 1**, so the app listens on loopback
+only. To reach it from another machine, install [Tailscale](https://tailscale.com) on both and
+set `PROFITPILOT_BIND` to the box's Tailscale IP. Never `0.0.0.0` on a network you don't
+control, and never port-forward it from your router.
 
 **Deploy on push.** `.github/workflows/deploy.yml` runs the backend and frontend tests on
-GitHub's runners, then rebuilds and restarts the container on the box:
-
-1. On the box, add a [self-hosted runner](https://docs.github.com/actions/hosting-your-own-runners)
-   for this repository with the extra label `profitpilot`, installed as a service.
-2. In the repo's *Settings → Secrets and variables → Actions → Variables*, set
-   `PROFITPILOT_ENV_FILE` (required), and optionally `PROFITPILOT_BIND` and
-   `PROFITPILOT_BACKUP_DIR`.
-3. Push to `main` (or run the workflow manually).
+GitHub's runners, then updates the box through its self-hosted runner — `update.ps1` by
+default, Docker Compose if `PROFITPILOT_DEPLOY=docker`. Only `main` deploys.
 
 > **Keep the repository private.** The deploy job runs on the machine that holds your broker
 > keys. The workflow has no `pull_request` trigger on purpose — don't add one.
@@ -747,9 +826,8 @@ GitHub's runners, then rebuilds and restarts the container on the box:
 | `Daily: N strategies running, M stale. backup: …` | Once a day at `HEARTBEAT_HOUR_UTC`. **Not receiving it means the box is down.** |
 
 **Backups.** The daily heartbeat also writes a consistent SQLite backup (SQLite's own backup
-API, safe while running) and keeps the newest `BACKUP_KEEP` (default 14). By default they go to
-a Docker volume on the same disk; set `PROFITPILOT_BACKUP_DIR` to a folder on another disk or a
-cloud-synced folder (writable by uid 1000) so a dead disk doesn't take the backups with it.
+API, safe while running) and keeps the newest `BACKUP_KEEP` (default 14). Point `BACKUP_DIR` at
+another disk or a cloud-synced folder so a dead disk doesn't take the backups with it.
 
 **Schema changes.** The app runs Alembic migrations on every startup, so a deploy that
 changes an ORM model updates the box's database in place. A database created before
@@ -866,7 +944,7 @@ design: guessing a tick size is how orders get routed to the wrong product.
 - [x] Order conformance on the strategy-driven live path — `ExecutionEngine` rounds to tick/lot and rejects sub-minimum or unknown-symbol opens before `RiskManager`/the broker; closes execute at the exact held quantity, price-only conformed, never blocked
 - [x] Manual Trade-page orders — `BrokerService.place_order` runs `conform_order` (round to tick/lot, reject unseeded symbols/below-min-notional) before hitting the broker, and can be sized by base quantity, fiat amount, or % of the held position; deliberately skips `RiskManager` — a manual order is an intentional user override, not a strategy
 - [ ] Wire `BinanceAdapter` to the instrument catalog; refresh `seed.py` from each broker's live instruments endpoint
-- [ ] Strategy-family modules (`grid`, `arbitrage`, `scalping`, `swing`) behind shared contracts — grid designed in full, none built
+- [~] Strategy-family modules — **grid built** (backtest-only, own simulator, `POST /backtests/grid`); funding-rate carry next as research; scalping/cross-exchange arbitrage dropped. Shared family contracts deferred until a second family exists
 - [x] Strategy Builder — Monaco editor + subprocess sandbox execution (write-by-hand, no AI)
 - [x] Live/paper strategy executor with WebSocket signals
 - [x] Full trade pipeline: sizing → RiskManager → broker → fill → persistence (paper via built-in simulator); paper models the same commission + slippage as the backtest and is verified end-to-end
@@ -911,15 +989,12 @@ design: guessing a tick size is how orders get routed to the wrong product.
 
 ## Future Ideas
 
-- **Strategy families** — one self-contained module per family (`grid`, `arbitrage`, `scalping`,
-  `swing`, …) behind shared abstractions, so adding a family edits no existing family, router, or
-  page. The grid bot is fully designed and is the first one queued. See the architecture note above
-  and `TODO.md` for the contracts and the two open design decisions.
-- **Internal MCP server** — expose `run_backtest` / `dca_compare` / `monte_carlo` as Model Context
-  Protocol tools so sweeps can be driven by an agent instead of by hand-written scripts in
-  `scratchpad/`. Under discussion, not decided — a conversational sweep also makes it trivially easy
-  to fish for a flattering parameter set, so any such tool should report walk-forward results by
-  default rather than in-sample bests.
+- **Strategy families** — one self-contained module per family behind shared abstractions, so
+  adding a family edits no existing family, router, or page. The grid bot is built (its own module
+  and simulator); the shared contracts wait for a second family. See `TODO.md`.
+- **Agent research tools** — done as a CLI (`backend/scripts/research.py`) rather than an MCP
+  server: it reports walk-forward (out-of-sample) results with a pass/fail verdict and never an
+  in-sample best. An MCP wrapper is only worth adding if a non-Claude-Code client needs it.
 - **Strategy marketplace** — share and discover community strategies ranked by live Sharpe ratio
 - **Portfolio optimizer** — mean-variance optimization, Kelly criterion position sizing across strategies
 - **Walk-forward testing** — rolling in/out-of-sample windows to avoid overfitting in backtests

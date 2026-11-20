@@ -582,3 +582,64 @@ def test_rotation_rates_normalized_across_timeframes():
     rd = run_accumulation(daily, CycleRotationPolicy(CycleParams(), rp, _const_drop(0.5)), **common_d)
     rh = run_accumulation(h4, CycleRotationPolicy(CycleParams(), rp, _const_drop(0.5)), **common_h)
     assert rh.units_accumulated == pytest.approx(rd.units_accumulated, rel=0.12)
+
+
+# ── Trend-aware DCA (TODO 🚦 A4b / A4c) ───────────────────────────────────────
+
+from app.domain.backtest.accumulation import TrendGatedDcaPolicy  # noqa: E402
+
+
+def _run_trend(closes, sell_below, period=5):
+    return run_accumulation(
+        _bars(closes), TrendGatedDcaPolicy(period=period, sell_below=sell_below),
+        capital_model="contributions", contribution_amount=100.0, contribution_interval_days=1,
+        lump_sum_budget=0.0, commission_pct=0.0, slippage_pct=0.0, bars_per_year=365,
+    )
+
+
+_UP = [100.0 + i for i in range(10)]              # well above its 5-day average
+_DOWN = [_UP[-1] - 3 * i for i in range(1, 8)]     # falls below it
+_BACK = [_DOWN[-1] + 6 * i for i in range(1, 6)]   # recovers above it
+
+
+def test_trend_dca_invests_everything_while_above_the_average():
+    res = _run_trend(_UP, sell_below=False)
+    assert res.dry_powder == pytest.approx(0.0)
+    assert res.units_accumulated == pytest.approx(_run_flat(_UP).units_accumulated)
+
+
+def test_pause_keeps_holdings_and_saves_deposits_below_the_average():
+    up_only = _run_trend(_UP, sell_below=False)
+    res = _run_trend(_UP + _DOWN, sell_below=False)
+    # Below the average: no new buys (so units stay what the uptrend bought, give or take the
+    # first down bar, which can still be above a lagging average) and deposits pile up as cash.
+    assert res.units_accumulated <= up_only.units_accumulated + 100 / _DOWN[0] + 1e-9
+    assert res.dry_powder >= 100.0 * (len(_DOWN) - 1) - 1e-6
+
+
+def test_switch_sells_everything_below_the_average():
+    res = _run_trend(_UP + _DOWN, sell_below=True)
+    assert res.units_accumulated == pytest.approx(0.0)
+    assert res.realized_pnl != 0.0
+
+
+def test_savings_are_invested_once_price_is_back_above():
+    for sell_below in (False, True):
+        res = _run_trend(_UP + _DOWN + _BACK, sell_below=sell_below)
+        assert res.dry_powder == pytest.approx(0.0), sell_below
+        assert res.units_accumulated > 0
+
+
+def test_decisions_never_use_future_prices():
+    """Causality: the account after bar k is identical whether or not later bars exist."""
+    closes = _UP + _DOWN + _BACK
+    for sell_below in (False, True):
+        full = _run_trend(closes, sell_below)
+        for k in (8, 12, 16):
+            part = _run_trend(closes[:k], sell_below)
+            assert full.equity_curve[k - 1].value == pytest.approx(part.equity_curve[-1].value)
+
+
+def test_invalid_period_is_rejected():
+    with pytest.raises(ValueError):
+        TrendGatedDcaPolicy(period=1, sell_below=False)

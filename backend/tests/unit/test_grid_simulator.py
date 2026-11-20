@@ -38,7 +38,12 @@ def _sawtooth_bars(n=150, low=95.0, high=105.0, period=10):
 
 
 def test_sawtooth_produces_grid_trades_and_income_dominated_pnl():
-    bars = _sawtooth_bars()
+    # n=146 ends on a wave TOP (i=145, phase 5 → 105). Buys only fill below the previous close,
+    # i.e. on the way down; on the way back up to 105 every one of them reaches its sell target
+    # one rung higher, so nothing is left open at a top and mark-to-market is ~0. Ending at a
+    # bottom (the old n=150 → 97) leaves the down-leg's buys underwater by construction — that
+    # measures where the wave stopped, not whether the grid earns.
+    bars = _sawtooth_bars(n=146)
     grid_params = GridParams(range_atr_mult=2.0, spacing_atr_mult=0.15, min_edge=1.0,
                              fee_pct=0.0005, slippage_pct=0.0002)
     plan_series = build_plan_series(bars, grid_params, _RPARAMS)
@@ -115,13 +120,16 @@ def test_simulator_fills_bar_i_using_plan_i_minus_1_not_plan_i():
     90/100/110); it never comes near plans[2]'s ladder (rungs at 190/200/210). If the simulator
     filled bar 2 against plans[2] (the same-bar plan), no rung would ever cross and no lot would
     open. Only filling against plans[1] (the previous bar's plan) can open a lot here -- so this
-    test can only pass once bar i is decided by plans[i-1]."""
+    test can only pass once bar i is decided by plans[i-1].
+
+    The market sits at 105 before bar 2 dips to 99: the 100 rung was BELOW the market, so it is
+    a genuinely resting buy (a rung above the previous close never is — review #1)."""
     start = datetime(2024, 1, 1, tzinfo=timezone.utc)
     bars = [
-        OHLCV(timestamp=start, symbol="BTCUSDT", open=50, high=50, low=50, close=50,
+        OHLCV(timestamp=start, symbol="BTCUSDT", open=105, high=105, low=105, close=105,
               volume=1, timeframe=Timeframe.H1),
-        OHLCV(timestamp=start + timedelta(hours=1), symbol="BTCUSDT", open=50, high=50, low=50,
-              close=50, volume=1, timeframe=Timeframe.H1),
+        OHLCV(timestamp=start + timedelta(hours=1), symbol="BTCUSDT", open=105, high=105, low=105,
+              close=105, volume=1, timeframe=Timeframe.H1),
         OHLCV(timestamp=start + timedelta(hours=2), symbol="BTCUSDT", open=100, high=101, low=99,
               close=100, volume=1, timeframe=Timeframe.H1),
     ]
@@ -241,9 +249,78 @@ def test_cooldown_keeps_the_grid_flat_after_a_forced_close():
             return i == 1
 
     bars = _flat_bars(6)
-    levels = GridLevels(center=100.0, step_pct=0.1, rungs=[90.0, 100.0, 110.0])
+    # Rung 99.6: inside every bar's 99.5–100.5 range and below every previous close (100), so it
+    # is a resting buy each bar (a rung AT the close, like 100, never is — review #1).
+    levels = GridLevels(center=100.0, step_pct=0.1, rungs=[89.6, 99.6, 109.6])
     result = run_grid_backtest(bars, _constant_plan_series(6, levels), _StopOnceAtBar1(),
                                GridParams(cooldown_bars=2),
                                initial_capital=10_000.0, notional_per_rung=200.0)
     # Stopped on bar 1, flat through bars 2-3, reopens on bar 4 -> lots open on bars 4 and 5 only.
     assert result.time_in_grid_pct == pytest.approx(round(2 / 6 * 100, 2))
+
+
+def test_the_stop_out_bar_fills_its_resting_orders_before_stopping():
+    """Review #2: deciding the stop on bar i's close used to skip bar i's own fills, so buys
+    the price traded through on the way down were never opened — and never lost money.
+
+    Hand derivation. Ladder 96/98/100/102/104 (LONG_BIASED, Supertrend bearish), previous close
+    99, bar i: high 99, low 93.5, close 94.
+      * Resting buys below 99 touched by [93.5, 99]: 98 and 96.
+      * 96's sell target (98) is touched in the same bar → skipped (no same-bar round trip).
+      * So one long opens at 98 (target 100, not reached).
+      * Stop: close 94 < 96 × (1 − 1%) = 95.04 and bearish → force-close everything at 94.
+    Old code: no lot, so no force-close event (an empty close isn't counted) and zero loss."""
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    bars = [
+        OHLCV(timestamp=start, symbol="BTCUSDT", open=99, high=99, low=99, close=99,
+              volume=1, timeframe=Timeframe.H1),
+        OHLCV(timestamp=start + timedelta(hours=1), symbol="BTCUSDT", open=99, high=99, low=99,
+              close=99, volume=1, timeframe=Timeframe.H1),
+        OHLCV(timestamp=start + timedelta(hours=2), symbol="BTCUSDT", open=99, high=99, low=93.5,
+              close=94, volume=1, timeframe=Timeframe.H1),
+    ]
+    ladder = GridLevels(center=100.0, step_pct=0.02, rungs=[96.0, 98.0, 100.0, 102.0, 104.0])
+    plans = [
+        GridPlan(direction=GridDirection.FLAT, levels=None, supertrend_bullish=False,
+                 swing_high=None, swing_low=None),
+        GridPlan(direction=GridDirection.LONG_BIASED, levels=ladder, supertrend_bullish=False,
+                 swing_high=None, swing_low=None),
+        GridPlan(direction=GridDirection.LONG_BIASED, levels=ladder, supertrend_bullish=False,
+                 swing_high=None, swing_low=None),
+    ]
+    regime = RegimeSeries(
+        direction=[p.direction for p in plans], supertrend_dir=[-1, -1, -1],
+        bb_mid=[None, 100.0, 100.0], atr=[None, 1.0, 1.0], squeeze=[False, False, False],
+    )
+    grid_params = GridParams(reanchor_buffer_pct=0.01)
+
+    result = run_grid_backtest(
+        bars, GridPlanSeries(plans=plans, regime=regime), GuardedReanchorPolicy(grid_params),
+        grid_params, initial_capital=10_000.0, notional_per_rung=200.0,
+    )
+
+    assert result.force_close_count == 1        # the 98 lot existed, so the stop closed something
+    assert result.forced_exit_pnl < -7.0        # 200 notional bought at 98, out at 94 (−4.1%) + costs
+    assert result.max_inventory_notional > 0    # the lot is visible in the exposure disclosure
+    implied = result.grid_realized_pnl + result.forced_exit_pnl + result.mark_to_market_pnl
+    assert implied == pytest.approx(result.final_equity - 10_000.0, abs=0.02)
+
+
+def test_each_extension_reaches_further_than_the_last():
+    """Review #3: extensions widen the range to 2×, 3×, 4× range_atr_mult, but the extended
+    ladder was still clamped to max_rungs symmetrically around center, so with ATR spacing the
+    lowest rung barely moved — probe (center 100, ATR 4, defaults): 83.61 → 83.21 → 83.80, the
+    third extension reaching LESS far than the first. Scaling the rung cap with the range makes
+    every extension strictly deeper, while every gap still clears the cost floor."""
+    from app.domain.strategies.grid.levels import compute_levels, cost_floor_step_pct
+    from app.domain.strategies.grid.simulator import extended_params
+
+    base = GridParams()
+    lows = []
+    for k in (1, 2, 3):   # AccumulateNoStopPolicy: range_atr_mult × (1 + extensions_used)
+        params = extended_params(base, base.range_atr_mult * (1 + k))
+        levels = compute_levels(center=100.0, atr=4.0, params=params)
+        lows.append(levels.rungs[0])
+        gaps = [b / a - 1 for a, b in zip(levels.rungs, levels.rungs[1:])]
+        assert min(gaps) >= cost_floor_step_pct(params) * (1 - 1e-9)
+    assert lows[0] > lows[1] > lows[2], lows
